@@ -1,145 +1,30 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>WesmartAI 數位證據三方存證系統</title>
+  <meta charset="UTF-8">
+  <title>WesmartAI 數位證據第三方存證系統</title>
   <style>
-    body {
-      font-family: "Noto Sans TC", Arial, sans-serif;
-      background-color: #f5f8fb;
-      margin: 0;
-      padding: 40px;
-      display: flex;
-      justify-content: center;
-    }
-    .container {
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      width: 720px;
-      padding: 40px 60px;
-    }
-    h1 {
-      text-align: center;
-      color: #0033a0;
-      margin-bottom: 10px;
-    }
-    h2 {
-      text-align: center;
-      color: #0033a0;
-      margin-bottom: 30px;
-      font-weight: normal;
-    }
-    label {
-      display: block;
-      margin-top: 20px;
-      font-weight: bold;
-    }
-    input[type="text"], textarea {
-      width: 100%;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 14px;
-      margin-top: 6px;
-    }
-    input[type="file"] {
-      margin-top: 10px;
-    }
-    button {
-      margin-top: 25px;
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 6px;
-      font-size: 15px;
-      cursor: pointer;
-      color: white;
-      transition: opacity 0.2s ease;
-    }
-    button:hover { opacity: 0.9; }
-    #generateBtn { background-color: #0033a0; }
-    #sealBtn { background-color: #0a8754; }
-    #pdfBtn { background-color: #c62828; }
-    .preview-area {
-      margin-top: 20px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .preview-area img {
-      width: 150px;
-      height: 150px;
-      object-fit: cover;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-    }
-    hr {
-      border: none;
-      border-top: 2px solid #eee;
-      margin: 40px 0;
-    }
+    body { font-family:"Noto Sans TC",sans-serif; background:#f5f8fb; display:flex; justify-content:center; padding:40px; }
+    .container { background:white; border-radius:10px; padding:40px 60px; box-shadow:0 4px 10px rgba(0,0,0,0.1); width:720px; }
+    h1{text-align:center;color:#0033a0;margin-bottom:20px;}
+    label{font-weight:bold;display:block;margin-top:20px;}
+    input[type="text"],input[type="file"]{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:6px;}
+    button{width:100%;padding:12px;margin-top:30px;background:#c62828;color:white;border:none;border-radius:6px;font-size:16px;cursor:pointer;}
+    button:hover{opacity:0.9;}
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>WesmartAI</h1>
-    <h2>數位證據三方存證系統</h2>
+    <h1>WesmartAI 數位證據第三方存證系統</h1>
+    <form id="form" method="post" enctype="multipart/form-data" action="/generate">
+      <label>出證申請人名稱</label>
+      <input type="text" name="applicant" placeholder="請輸入姓名或公司名稱" required>
 
-    <form id="uploadForm" enctype="multipart/form-data">
-      <label for="applicant">出證申請人名稱</label>
-      <input type="text" id="applicant" name="applicant" placeholder="請輸入您的姓名或公司名稱" required>
+      <label>上傳圖像（可多檔）</label>
+      <input type="file" name="files" accept="image/*" multiple required>
 
-      <label for="images">上傳圖像（可複數上傳）</label>
-      <input type="file" id="images" name="files" accept="image/*" multiple required>
-      <div id="preview" class="preview-area"></div>
-
-      <button id="generateBtn" type="submit">生成封存報告</button>
+      <button type="submit">下載 PDF 存證報告</button>
     </form>
-
-    <hr>
-
-    <button id="sealBtn">下載封存 JSON</button>
-    <button id="pdfBtn">下載 PDF 存證報告</button>
   </div>
-
-  <script>
-    const imageInput = document.getElementById('images');
-    const preview = document.getElementById('preview');
-    const form = document.getElementById('uploadForm');
-
-    // 即時預覽多圖
-    imageInput.addEventListener('change', () => {
-      preview.innerHTML = '';
-      const files = imageInput.files;
-      Array.from(files).forEach(file => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          const img = document.createElement('img');
-          img.src = e.target.result;
-          preview.appendChild(img);
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    // 提交生成報告
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(form);
-      const res = await fetch('/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      alert("封存報告生成完成，Trace Token: " + data.trace_token);
-    });
-
-    document.getElementById('sealBtn').addEventListener('click', () => {
-      window.location.href = '/download/json';
-    });
-
-    document.getElementById('pdfBtn').addEventListener('click', () => {
-      window.location.href = '/download/pdf';
-    });
-  </script>
 </body>
 </html>
