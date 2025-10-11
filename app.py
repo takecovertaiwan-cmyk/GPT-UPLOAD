@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, send_file, jsonify, send_from_directory
 import hashlib, os
 from fpdf import FPDF
 from PIL import Image
@@ -27,6 +27,10 @@ def resize_image(path, max_width=800):
 def index():
     return render_template("index.html")
 
+@app.route("/uploads/<path:filename>")
+def serve_upload(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
 @app.route("/preview", methods=["POST"])
 def preview():
     files = request.files.getlist("files")
@@ -51,8 +55,6 @@ def generate_pdf():
 
     pdf = FPDF()
     pdf.add_page()
-
-    # 嘗試載入字型，若失敗則使用 Helvetica
     try:
         pdf.add_font("NotoSansTC", "", "NotoSansTC.otf", uni=True)
         pdf.set_font("NotoSansTC", size=12)
