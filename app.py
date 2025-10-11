@@ -1,11 +1,6 @@
 # ====================================================================
-# WesmartAI Archival System (v9.1-TC-DynamicData-FinalFont)
-# Traditional Chinese Edition with Dynamic Data and Correct Font
-# 1. Generates report based on actual user-uploaded image files.
-# 2. Uses Traditional Chinese text to match the sample PDF.
-# 3. CONFIGURED: Uses the 'NotoSansTC.otf' font file from your GitHub repo.
-# 4. Removes mock data generation. Report ID and timestamps are dynamic.
-# 5. Each uploaded image gets its own page with its hash value.
+# WesmartAI Archival System (v9.2-Final-Cleaned)
+# Final, cleaned version with PyMuPDF (fitz) completely removed.
 # ====================================================================
 
 import os
@@ -49,7 +44,6 @@ class WesmartPDFReport(FPDF):
         super().__init__(*args, **kwargs)
         # Load the Chinese font provided in your repository root.
         try:
-            # ---> UPDATED to use your font file <---
             self.add_font("NotoSansTC", "", "NotoSansTC.otf")
             self.has_chinese_font = True
         except RuntimeError:
@@ -58,7 +52,6 @@ class WesmartPDFReport(FPDF):
 
     def set_chinese_font(self, style="", size=12):
         if self.has_chinese_font:
-            # ---> UPDATED to use your font name <---
             self.set_font("NotoSansTC", style, size)
         else:
             self.set_font("Helvetica", style, size) # Fallback font
