@@ -1,5 +1,4 @@
-flask
-fpdf2
-pillow
-google-generativeai
-gunicorn
+flask==3.0.3
+fpdf2==2.8.4
+google-generativeai==0.7.2
+gunicorn==23.0.0
