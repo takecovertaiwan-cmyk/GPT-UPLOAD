@@ -1,57 +1,72 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>WesmartAI 數位證據第三方存證系統</title>
+  <title>WesmartAI Digital Evidence Upload</title>
   <style>
-    body { font-family: "Noto Sans TC", sans-serif; background-color: #f5f8fb; margin: 0; }
-    .container { max-width: 700px; margin: 30px auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    h2 { color: #0033A0; text-align: center; }
-    input[type="text"], input[type="file"] { width: 100%; padding: 8px; margin-top: 8px; margin-bottom: 16px; border: 1px solid #ccc; border-radius: 4px; }
-    button { display: block; width: 100%; padding: 10px; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
-    .btn-primary { background-color: #0046cc; color: white; }
-    .btn-danger { background-color: #C62828; color: white; margin-top: 10px; }
-    img { max-width: 100%; border-radius: 6px; margin-top: 8px; }
-    #previewArea { margin-top: 20px; }
+    body { font-family: Arial, sans-serif; margin: 40px; background: #f5f8fb; }
+    h1 { color: #0033a0; }
+    #preview { margin-top: 20px; }
+    img { max-width: 400px; border: 1px solid #ccc; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>WesmartAI 數位證據第三方存證系統</h2>
+  <h1>WesmartAI Digital Evidence Upload</h1>
 
-    <form id="uploadForm" onsubmit="handlePreview(event)">
-      <label>出證申請人名稱</label>
-      <input type="text" name="applicant" id="applicant" placeholder="請輸入姓名" required>
+  <form id="uploadForm" enctype="multipart/form-data">
+    <input type="file" id="fileInput" name="file" accept="image/*" required />
+    <button type="submit">Generate Preview</button>
+  </form>
 
-      <label>上傳圖像（可多檔）</label>
-      <input type="file" name="files" id="files" multiple accept="image/*" required>
-
-      <button type="submit" class="btn-primary">生成預覽圖與 Hash</button>
-    </form>
-
-    <div id="previewArea"></div>
-
-    <form id="pdfForm" method="POST" action="/generate">
-      <input type="hidden" name="applicant" id="pdf_applicant">
-      <button type="submit" class="btn-danger">下載 PDF 存證報告</button>
-    </form>
-  </div>
+  <div id="preview"></div>
+  <button id="downloadBtn" style="display:none;">Download PDF Report</button>
 
   <script>
-  async function handlePreview(e) {
-    e.preventDefault();
-    const formData = new FormData(document.getElementById("uploadForm"));
-    const res = await fetch("/preview", { method: "POST", body: formData });
-    const data = await res.json();
+    const form = document.getElementById("uploadForm");
+    const previewDiv = document.getElementById("preview");
+    const downloadBtn = document.getElementById("downloadBtn");
+    let currentFile = null;
+    let currentHash = null;
 
-    let html = "<h3>預覽圖與 Hash</h3>";
-    data.forEach(item => {
-      html += `<p><b>${item.filename}</b><br>SHA256: ${item.sha256}<br>大小: ${item.size}</p>`;
-      html += `<img src="/uploads/${item.filename}">`;
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return alert("Please select a file first.");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/preview", { method: "POST", body: formData });
+      if (!res.ok) return alert("Preview failed.");
+      const data = await res.json();
+
+      currentFile = file.name;
+      currentHash = data.sha256;
+
+      previewDiv.innerHTML = `
+        <p><b>SHA256:</b> ${data.sha256}</p>
+        <img src="${data.preview_url}" alt="Preview">
+      `;
+      downloadBtn.style.display = "block";
     });
-    document.getElementById("previewArea").innerHTML = html;
-    document.getElementById("pdf_applicant").value = document.getElementById("applicant").value;
-  }
+
+    downloadBtn.addEventListener("click", async () => {
+      if (!currentFile || !currentHash) return alert("No preview data.");
+      const res = await fetch("/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_name: currentFile, sha256: currentHash })
+      });
+      if (!res.ok) return alert("PDF generation failed.");
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `report_${currentFile}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
   </script>
 </body>
 </html>
