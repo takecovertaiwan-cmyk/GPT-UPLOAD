@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WesmartAI 可信智慧科技三方存證系統</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 2em; background-color: #f4f6f8; color: #333; }
+        .container { max-width: 900px; margin: auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1, h2 { color: #1a237e; text-align: center; }
+        .form-grid { display: grid; grid-template-columns: 1fr; gap: 1.5em; margin-bottom: 1.5em; }
+        .form-group { display: flex; flex-direction: column; }
+        .full-width { grid-column: 1 / -1; }
+        label { font-weight: 600; margin-bottom: 0.5em; color: #555; }
+        input, button { font-size: 1em; padding: 0.8em; border-radius: 6px; border: 1px solid #ccc; }
+        .upload-btn-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; }
+        .btn { display: block; width: 100%; box-sizing: border-box; text-align: center; background-color: #3f51b5; color: white; border: none; cursor: pointer; font-weight: bold; transition: background-color 0.2s ease; }
+        .upload-btn-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
+        .btn:hover { background-color: #303f9f; }
+        button:disabled { background-color: #9fa8da; cursor: not-allowed; }
+        #report-btn { background-color: #d32f2f; }
+        #report-btn:hover { background-color: #b71c1c; }
+        #results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5em; margin-top: 1.5em; }
+        .result-card { border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .result-card img { max-width: 100%; height: auto; display: block; }
+        .result-card p { padding: 1em; margin: 0; background: #fafafa; font-size: 0.9em; word-wrap: break-word; }
+        .spinner { margin: 2em auto; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #3f51b5; border-radius: 50%; animation: spin 1s linear infinite; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #status { text-align: center; margin-top: 1em; font-weight: 500; min-height: 1.2em; }
+        hr { border: none; height: 1px; background-color: #e0e0e0; margin: 2em 0; }
+        /* --- 新增 AI 分析相關樣式 --- */
+        .analyze-btn { 
+            background-color: #1976d2; color: white; border: none; 
+            padding: 6px 10px; font-size: 0.8em; border-radius: 4px; 
+            cursor: pointer; margin-top: 8px; transition: background-color 0.2s;
+        }
+        .analyze-btn:hover { background-color: #1565c0; }
+        .analyze-btn:disabled { background-color: #64b5f6; cursor: not-allowed; }
+        .analysis-result {
+            font-size: 0.9em; padding: 10px; margin: 10px;
+            background-color: #e3f2fd; border-left: 4px solid #1976d2;
+            text-align: left; white-space: pre-wrap; word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WesmartAI<br>可信智慧科技三方存證系統</h1>
+        
+        <h2>1. 上傳檔案及預覽</h2>
+        <div class="form-grid">
+            <div class="form-group full-width">
+                <label for="applicant_name">出證申請人名稱</label>
+                <input type="text" id="applicant_name" placeholder="請在此處輸入您的姓名或公司名稱">
+            </div>
+            <div class="form-group full-width">
+                 <div class="upload-btn-wrapper">
+                    <button class="btn">上傳檔案</button>
+                    <input type="file" id="file-upload" />
+                </div>
+            </div>
+        </div>
+        
+        <div id="spinner" class="spinner"></div>
+        <div id="status"></div>
+        <div id="results-grid"></div>
+
+        <hr>
+
+        <h2>2. 生成 PDF 報告</h2>
+        <div class="form-group full-width">
+             <button id="report-btn" disabled>下載 PDF 摘要報告</button>
+        </div>
+    </div>
+
+    <script>
+        const fileUpload = document.getElementById('file-upload');
+        const reportBtn = document.getElementById('report-btn');
+        const spinner = document.getElementById('spinner');
+        const statusEl = document.getElementById('status');
+        const resultsGrid = document.getElementById('results-grid');
+
+        fileUpload.addEventListener('change', async (event) => {
+            const applicantName = document.getElementById('applicant_name').value;
+            if (!applicantName) {
+                alert('請先填寫 申請人名稱！');
+                event.target.value = '';
+                return;
+            }
+
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('applicant_name', applicantName);
+
+            spinner.style.display = 'block';
+            statusEl.textContent = `正在上傳檔案 "${file.name}"...`;
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    statusEl.textContent = `✅ 檔案 "${file.name}" 已成功加入存證佇列。`;
+                    reportBtn.disabled = false;
+
+                    const card = document.createElement('div');
+                    card.className = 'result-card';
+                    card.id = `card-${result.stored_filename}`;
+
+                    let previewHTML = '';
+                    if (file.type.startsWith('image/')) {
+                        previewHTML = `<img src="${URL.createObjectURL(file)}" alt="Preview">`;
+                    } else {
+                        previewHTML = `<p style="padding: 2em 1em;">${file.type === 'application/pdf' ? '📖' : '📄'}<br>${file.name}</p>`;
+                    }
+
+                    let analyzeBtnHTML = '';
+                    if (file.name.match(/\.(txt|md|json|py|html|css|js)$/i)) {
+                         analyzeBtnHTML = `<button class="analyze-btn" data-filename="${result.stored_filename}">使用 AI 分析</button>`;
+                    }
+
+                    card.innerHTML = `${previewHTML}<div class="card-footer" style="padding: 0.5em 1em 1em 1em; background: #fafafa;"><strong>${file.name}</strong><br>${analyzeBtnHTML}</div>`;
+                    resultsGrid.appendChild(card);
+
+                } else { throw new Error(result.error || '檔案上傳失敗'); }
+            } catch (error) {
+                statusEl.textContent = `❌ 錯誤: ${error.message}`;
+            } finally {
+                spinner.style.display = 'none';
+                event.target.value = ''; 
+            }
+        });
+
+        resultsGrid.addEventListener('click', async (event) => {
+            if (event.target.classList.contains('analyze-btn')) {
+                const button = event.target;
+                const storedFilename = button.dataset.filename;
+                const card = document.getElementById(`card-${storedFilename}`);
+
+                button.disabled = true;
+                button.textContent = '分析中...';
+
+                try {
+                    const response = await fetch('/analyze_file', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ stored_filename: storedFilename })
+                    });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        const oldResult = card.querySelector('.analysis-result');
+                        if (oldResult) oldResult.remove();
+                        
+                        const analysisDiv = document.createElement('div');
+                        analysisDiv.className = 'analysis-result';
+                        analysisDiv.textContent = result.analysis;
+                        card.appendChild(analysisDiv);
+                        button.textContent = '重新分析';
+                    } else { throw new Error(result.error || '分析失敗'); }
+                } catch (error) {
+                    alert(`分析時發生錯誤: ${error.message}`);
+                    button.textContent = '使用 AI 分析';
+                } finally {
+                    button.disabled = false;
+                }
+            }
+        });
+
+        reportBtn.addEventListener('click', async () => {
+            spinner.style.display = 'block';
+            statusEl.textContent = '正在生成 PDF 報告...';
+            reportBtn.disabled = true;
+            try {
+                const response = await fetch('/create_report', { method: 'POST' });
+                const result = await response.json();
+                if (response.ok) {
+                    statusEl.textContent = 'PDF 報告生成完畢，即將下載。';
+                    const a = document.createElement('a');
+                    a.href = result.report_url;
+                    a.download = result.report_url.split('/').pop();
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } else { throw new Error(result.error || '報告生成失敗'); }
+            } catch (error) {
+                statusEl.textContent = `❌ 錯誤: ${error.message}`;
+            } finally {
+                spinner.style.display = 'none';
+                reportBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
