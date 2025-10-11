@@ -1,10 +1,11 @@
 # ====================================================================
-# WesmartAI Archival System (v8-EN-GenAI)
-# English Edition for Generative AI Reports
-# 1. Uses the structure from the sample PDF but with all English text.
-# 2. Removed the Chinese font dependency and uses built-in Helvetica.
-# 3. Retains the new data structure for AI generation tasks.
-# 4. Uses hard-coded mock data for demonstration purposes.
+# WesmartAI Archival System (v9.1-TC-DynamicData-FinalFont)
+# Traditional Chinese Edition with Dynamic Data and Correct Font
+# 1. Generates report based on actual user-uploaded image files.
+# 2. Uses Traditional Chinese text to match the sample PDF.
+# 3. CONFIGURED: Uses the 'NotoSansTC.otf' font file from your GitHub repo.
+# 4. Removes mock data generation. Report ID and timestamps are dynamic.
+# 5. Each uploaded image gets its own page with its hash value.
 # ====================================================================
 
 import os
@@ -13,7 +14,6 @@ import datetime
 import hashlib
 import json
 import qrcode
-import fitz # This is PyMuPDF, kept for potential future use
 from flask import Flask, render_template, request, jsonify, url_for, session, send_from_directory
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
@@ -28,6 +28,13 @@ if not os.path.exists(static_folder):
     os.makedirs(static_folder)
 app.config["UPLOAD_FOLDER"] = static_folder
 
+# --- Configuration for allowed file types ---
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 # --- Utility Function ---
 def sha256_file(filepath):
     sha256_hash = hashlib.sha256()
@@ -36,12 +43,30 @@ def sha256_file(filepath):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
-# --- PDF Report Generator (English Version) ---
+# --- PDF Report Generator (Traditional Chinese Version) ---
 class WesmartPDFReport(FPDF):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Load the Chinese font provided in your repository root.
+        try:
+            # ---> UPDATED to use your font file <---
+            self.add_font("NotoSansTC", "", "NotoSansTC.otf")
+            self.has_chinese_font = True
+        except RuntimeError:
+            self.has_chinese_font = False
+            print("WARNING: 'NotoSansTC.otf' not found. PDF text will not render correctly.")
+
+    def set_chinese_font(self, style="", size=12):
+        if self.has_chinese_font:
+            # ---> UPDATED to use your font name <---
+            self.set_font("NotoSansTC", style, size)
+        else:
+            self.set_font("Helvetica", style, size) # Fallback font
+
     def footer(self):
         self.set_y(-15)
-        self.set_font("Helvetica", "I", 8)
-        self.cell(0, 10, f"Page {self.page_no()}/{self.alias_nb_pages()}", align="C")
+        self.set_chinese_font("I", 8)
+        self.cell(0, 10, f"第 {self.page_no()} / {self.alias_nb_pages()} 頁", align="C")
 
     def create_cover(self, d):
         self.add_page()
@@ -49,79 +74,71 @@ class WesmartPDFReport(FPDF):
             self.image("LOGO.jpg", x=10, y=8, w=50)
         
         self.set_y(60)
-        self.set_font("Helvetica", "B", 20)
-        self.cell(0, 15, "WesmartAI Evidence Report", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        self.set_chinese_font("B", 20)
+        self.cell(0, 15, "WesmartAI 證據報告", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         self.ln(15)
 
-        self.set_font("Helvetica", "", 12)
-        field_width = 50
-        self.cell(field_width, 10, "Applicant:")
+        self.set_chinese_font("", 12)
+        field_width = 45
+        self.cell(field_width, 10, "出證申請人:")
         self.cell(0, 10, d['applicant_name'], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        self.cell(field_width, 10, "Subject:")
+        self.cell(field_width, 10, "申請事項:")
         self.cell(0, 10, d['application_matter'], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        self.cell(field_width, 10, "Timestamp (UTC):")
+        self.cell(field_width, 10, "出證時間:")
         self.cell(0, 10, d['report_timestamp_utc'], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        self.cell(field_width, 10, "Report ID:")
+        self.cell(field_width, 10, "出證編號 (報告ID):")
         self.cell(0, 10, d['report_id'], new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        self.cell(field_width, 10, "Issuing Unit:")
+        self.cell(field_width, 10, "出證單位:")
         self.cell(0, 10, d.get('issuing_unit', 'WesmartAI Inc.'), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    def create_generation_details(self, d):
-        self.add_page()
-        task = d.get("generation_task", {})
-
-        self.set_font("Helvetica", "B", 14)
-        self.cell(0, 12, "1. Generation Task Information", new_x=XPos.LMARGIN, new_y=YPos.NEXT, border='B')
-        self.ln(5)
-        self.set_font("Helvetica", "", 11)
-        self.cell(40, 8, "Trace Token:")
-        self.set_font("Courier", "", 11)
-        self.cell(0, 8, task.get("trace_token"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        self.set_font("Helvetica", "", 11)
-        self.cell(40, 8, "Total Versions:")
-        self.cell(0, 8, str(task.get("total_versions")), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        self.ln(10)
-
-        self.set_font("Helvetica", "B", 14)
-        self.cell(0, 12, "2. Snapshots of Generated Versions", new_x=XPos.LMARGIN, new_y=YPos.NEXT, border='B')
-        self.ln(5)
-
-        for version in task.get("versions", []):
-            if self.get_y() > 160:
-                self.add_page()
-
-            self.set_font("Helvetica", "B", 12)
-            self.cell(0, 10, f"Version Index: {version['index']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    def create_file_detail_pages(self, d):
+        files = d.get("archived_files", [])
+        
+        for i, file_info in enumerate(files):
+            self.add_page()
             
-            if os.path.exists(version['image_path']):
-                self.image(version['image_path'], w=80, x=15)
+            self.set_chinese_font("B", 14)
+            self.cell(0, 12, f"存證檔案快照 ({i+1}/{len(files)})", new_x=XPos.LMARGIN, new_y=YPos.NEXT, border='B')
+            self.ln(10)
             
-            self.set_xy(100, self.get_y() - 80)
+            image_path = os.path.join(app.config["UPLOAD_FOLDER"], file_info['stored_filename'])
+            if os.path.exists(image_path):
+                try:
+                    with Image.open(image_path) as img:
+                        w, h = img.size
+                        aspect_ratio = h / w
+                        display_w = 160 
+                        display_h = display_w * aspect_ratio
+                        if display_h > 180:
+                            display_h = 180
+                            display_w = display_h / aspect_ratio
+                        
+                        pos_x = (self.w - display_w) / 2
+                        self.image(image_path, x=pos_x, y=self.get_y(), w=display_w, h=display_h)
+                        self.set_y(self.get_y() + display_h + 10)
+                except Exception as e:
+                    self.cell(0, 10, f"[無法預覽圖片: {e}]", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+            self.set_chinese_font("B", 12)
+            self.cell(0, 10, f"檔案索引: {i+1}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             
-            self.set_font("Helvetica", "", 10)
-            self.multi_cell(0, 7, f"- Timestamp (UTC):\n  {version['timestamp_utc']}")
+            self.set_chinese_font("", 10)
+            self.multi_cell(0, 7, f"- 原始檔名:\n  {file_info['original_filename']}")
             self.ln(2)
-            self.set_x(100)
-            self.multi_cell(0, 7, f"- Image Hash (SHA-256 over Base64):\n")
+            self.multi_cell(0, 7, f"- 存證時間戳記 (UTC):\n  {file_info['timestamp_utc']}")
+            self.ln(2)
+            self.multi_cell(0, 7, f"- 檔案雜湊 (SHA-256):\n")
             self.set_font("Courier", "", 8)
-            self.set_x(102)
-            self.multi_cell(0, 4, f"{version['image_hash']}")
+            self.multi_cell(0, 5, f"  {file_info['sha256_hash']}")
             self.ln(2)
-            self.set_font("Helvetica", "", 10)
-            self.set_x(100)
-            self.multi_cell(0, 7, f"- Input Prompt:\n  {version['prompt']}")
-            self.ln(2)
-            self.set_x(100)
-            self.multi_cell(0, 7, f"- Seed:\n  {version['seed']}")
-            self.ln(30)
 
     def create_conclusion_page(self, d):
         self.add_page()
-        self.set_font("Helvetica", "B", 14)
-        self.cell(0, 12, "3. Report Verification", new_x=XPos.LMARGIN, new_y=YPos.NEXT, border='B')
+        self.set_chinese_font("B", 14)
+        self.cell(0, 12, "報告驗證", new_x=XPos.LMARGIN, new_y=YPos.NEXT, border='B')
         self.ln(10)
 
-        qr_data = json.dumps(d, sort_keys=True, ensure_ascii=False)
+        qr_data = json.dumps({"report_id": d['report_id'], "hash": d['report_main_hash']}, sort_keys=True)
         qr = qrcode.QRCode(version=1, box_size=8, border=4)
         qr.add_data(qr_data)
         qr.make(fit=True)
@@ -129,18 +146,18 @@ class WesmartPDFReport(FPDF):
         qr_path = os.path.join(app.config["UPLOAD_FOLDER"], f"qr_{d['report_id']}.png")
         img.save(qr_path)
         
-        self.set_font("Helvetica", "", 11)
-        self.cell(0, 10, "Scan QR Code to visit the verification page", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.set_chinese_font("", 11)
+        self.cell(0, 10, "掃描 QR Code 前往驗證頁面", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.image(qr_path, w=80, h=80, x=65)
         self.ln(5)
 
-        self.set_font("Helvetica", "", 11)
-        text = "The authenticity and integrity of this report depend on its corresponding 'proof_event.json' evidence file. The hash of this JSON file (Final Event Hash) is recorded below and can be used for comparison and verification."
+        self.set_chinese_font("", 11)
+        text = "本報告的真實性與完整性，取決於其對應的 'proof_event.json' 證據檔案。此 JSON 檔案的雜湊值 (Final Event Hash) 被記錄於下，可用於比對與驗證。"
         self.multi_cell(0, 8, text, align='L')
         self.ln(8)
 
-        self.set_font("Helvetica", "B", 12)
-        self.cell(0, 8, "Final Event Hash:", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.set_chinese_font("B", 12)
+        self.cell(0, 8, "最終事件雜湊值 (Final Event Hash):", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.set_font("Courier", "", 9)
         self.multi_cell(0, 5, d['report_main_hash'])
 
@@ -154,15 +171,15 @@ def index():
 def static_download(filename):
     return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
-# The /upload route is kept, but it is NOT used by the new /create_report logic.
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    # ... (original upload logic remains here, unchanged)
     if "file" not in request.files: return jsonify({"error": "No file part in request"}), 400
     file = request.files["file"]
     applicant_name = request.form.get("applicant_name", "N/A")
     if file.filename == "": return jsonify({"error": "No file selected"}), 400
+    if not allowed_file(file.filename): return jsonify({"error": f"Invalid file type. Please upload an image ({', '.join(ALLOWED_EXTENSIONS)})"}), 400
     if not session.get("applicant_name") and applicant_name: session["applicant_name"] = applicant_name
+        
     try:
         ext = os.path.splitext(file.filename)[1]
         file_uuid = str(uuid.uuid4())
@@ -170,25 +187,22 @@ def upload_file():
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], stored_filename)
         file.save(filepath)
         file_hash = sha256_file(filepath)
-        preview_urls = []
-        pages_data = []
-        if ext.lower() == ".pdf":
-            doc = fitz.open(filepath)
-            for i in range(len(doc)):
-                page = doc.load_page(i)
-                pix = page.get_pixmap(dpi=150)
-                preview_filename = f"{file_uuid}_page_{i + 1}.jpg"
-                preview_filepath = os.path.join(app.config["UPLOAD_FOLDER"], preview_filename)
-                pix.save(preview_filepath)
-                preview_hash = sha256_file(preview_filepath)
-                preview_urls.append(url_for("static_download", filename=preview_filename))
-                pages_data.append({"page_num": i + 1, "preview_filename": preview_filename, "sha256_hash": preview_hash})
-            doc.close()
-        file_info = {"original_filename": file.filename, "stored_filename": stored_filename, "sha256_hash": file_hash, "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "pages": pages_data}
+        
+        file_info = {
+            "original_filename": file.filename,
+            "stored_filename": stored_filename,
+            "sha256_hash": file_hash,
+            "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        
         uploaded_files = session.get("uploaded_files", [])
         uploaded_files.append(file_info)
         session["uploaded_files"] = uploaded_files
-        return jsonify({"success": True, "message": "File uploaded successfully", "stored_filename": stored_filename, "is_pdf": ext.lower() == ".pdf", "preview_urls": preview_urls})
+        
+        return jsonify({
+            "success": True, "message": "Image uploaded successfully", "stored_filename": stored_filename,
+            "is_pdf": False, "preview_urls": [url_for("static_download", filename=stored_filename)]
+        })
     except Exception as e:
         print(f"Upload failed: {e}")
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
@@ -196,61 +210,31 @@ def upload_file():
 @app.route("/create_report", methods=["POST"])
 def create_report():
     try:
-        # --- Create Mock Images for Demonstration ---
-        img_folder = app.config["UPLOAD_FOLDER"]
-        Image.new('RGB', (400, 400), color = '#1a237e').save(os.path.join(img_folder, "wolf.jpg"))
-        Image.new('RGB', (400, 400), color = '#ffc107').save(os.path.join(img_folder, "lion.jpg"))
-        Image.new('RGB', (400, 400), color = '#795548').save(os.path.join(img_folder, "bear.jpg"))
+        uploaded_files = session.get("uploaded_files", [])
+        if not uploaded_files:
+            return jsonify({"error": "No files have been uploaded to include in the report."}), 400
 
-        # --- Mock Data Structure to Match Sample PDF (in English) ---
         proof_data = {
-            "report_id": "9e55900e-ca03-46f0-9368-0b0f32282b35",
-            "applicant_name": "Wes Huang",
-            "application_matter": "WesmartAI Generative AI Evidence Report",
-            "report_timestamp_utc": "2025-10-08T16:03:41.692913+00:00",
+            "report_id": str(uuid.uuid4()),
+            "applicant_name": session.get("applicant_name", "N/A"),
+            "application_matter": "WesmartAI 檔案存證報告",
+            "report_timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "issuing_unit": "WesmartAI Inc.",
-            "generation_task": {
-                "trace_token": "3e6b72f0-96a6-4aea-9b94-bada98eed4de",
-                "total_versions": 3,
-                "versions": [
-                    {
-                        "index": 1,
-                        "timestamp_utc": "2025-10-08T16:03:20.167531+00:00",
-                        "image_hash": "c4b0845c7635a8e51c5f85777ccb3c8a67172b0c99fedc69cd038da9cb08a6f2",
-                        "prompt": "WOLF",
-                        "seed": "8516076",
-                        "image_path": os.path.join(img_folder, "wolf.jpg")
-                    },
-                    {
-                        "index": 2,
-                        "timestamp_utc": "2025-10-08T16:03:28.452910+00:00",
-                        "image_hash": "f2d3a17e2c908db6a2b5c5b0e1b6a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2a1",
-                        "prompt": "LION",
-                        "seed": "9924102",
-                        "image_path": os.path.join(img_folder, "lion.jpg")
-                    },
-                    {
-                        "index": 3,
-                        "timestamp_utc": "2025-10-08T16:03:35.918245+00:00",
-                        "image_hash": "a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8",
-                        "prompt": "BEAR",
-                        "seed": "1130548",
-                        "image_path": os.path.join(img_folder, "bear.jpg")
-                    }
-                ]
-            }
+            "archived_files": uploaded_files
         }
         
-        # Calculate the main hash for the entire data structure
         proof_bytes = json.dumps(proof_data, sort_keys=True, ensure_ascii=False).encode("utf-8")
         main_hash = hashlib.sha256(proof_bytes).hexdigest()
         proof_data["report_main_hash"] = main_hash
         
-        # Generate the PDF
         pdf = WesmartPDFReport()
+        if not pdf.has_chinese_font:
+             return jsonify({"error": "Server is missing Chinese font file, cannot generate report."}), 500
+
         pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.alias_nb_pages()
         pdf.create_cover(proof_data)
-        pdf.create_generation_details(proof_data)
+        pdf.create_file_detail_pages(proof_data)
         pdf.create_conclusion_page(proof_data)
         
         report_filename = f"WesmartAI_Report_{proof_data['report_id']}.pdf"
@@ -263,8 +247,6 @@ def create_report():
         })
 
     except Exception as e:
-        print(f"Report generation failed: {e}")
-        # Add traceback for detailed debugging
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Report generation failed: {str(e)}"}), 500
