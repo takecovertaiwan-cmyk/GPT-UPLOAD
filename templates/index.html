@@ -1,30 +1,69 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
-  <title>WesmartAI 數位證據第三方存證系統</title>
-  <style>
-    body { font-family:"Noto Sans TC",sans-serif; background:#f5f8fb; display:flex; justify-content:center; padding:40px; }
-    .container { background:white; border-radius:10px; padding:40px 60px; box-shadow:0 4px 10px rgba(0,0,0,0.1); width:720px; }
-    h1{text-align:center;color:#0033a0;margin-bottom:20px;}
-    label{font-weight:bold;display:block;margin-top:20px;}
-    input[type="text"],input[type="file"]{width:100%;padding:10px;margin-top:6px;border:1px solid #ccc;border-radius:6px;}
-    button{width:100%;padding:12px;margin-top:30px;background:#c62828;color:white;border:none;border-radius:6px;font-size:16px;cursor:pointer;}
-    button:hover{opacity:0.9;}
-  </style>
+<meta charset="UTF-8" />
+<title>WesmartAI 數位證據第三方存證系統</title>
+<style>
+body { font-family:"Noto Sans TC",sans-serif; background:#f5f8fb; display:flex; justify-content:center; align-items:center; height:100vh; }
+.container { background:white; padding:40px; border-radius:20px; box-shadow:0 0 20px rgba(0,0,0,0.1); width:500px; }
+h1 { color:#0033a0; text-align:center; }
+button { width:100%; padding:12px; border:none; border-radius:8px; color:white; font-size:16px; cursor:pointer; }
+#previewBtn { background:#0055cc; }
+#generateBtn { background:#d32f2f; margin-top:10px; }
+img { max-width:100%; margin-top:10px; border-radius:8px; }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h1>WesmartAI 數位證據第三方存證系統</h1>
-    <form id="form" method="post" enctype="multipart/form-data" action="/generate">
-      <label>出證申請人名稱</label>
-      <input type="text" name="applicant" placeholder="請輸入姓名或公司名稱" required>
+<div class="container">
+  <h1>WesmartAI 數位證據第三方存證系統</h1>
+  <form id="uploadForm">
+    <label>出證申請人名稱</label><br>
+    <input type="text" id="applicant" name="applicant" required style="width:100%;padding:8px;margin-bottom:10px;"><br>
+    <label>上傳圖像（可多檔）</label><br>
+    <input type="file" id="files" name="files" multiple required><br><br>
+    <button type="button" id="previewBtn">生成預覽圖與 Hash</button>
+  </form>
+  <div id="previewArea"></div>
+  <button type="button" id="generateBtn" style="display:none;">下載 PDF 存證報告</button>
+</div>
 
-      <label>上傳圖像（可多檔）</label>
-      <input type="file" name="files" accept="image/*" multiple required>
+<script>
+let snapshots = [];
 
-      <button type="submit">下載 PDF 存證報告</button>
-    </form>
-  </div>
+document.getElementById("previewBtn").onclick = async () => {
+  const formData = new FormData(document.getElementById("uploadForm"));
+  const res = await fetch("/preview", { method:"POST", body:formData });
+  const data = await res.json();
+  if(data.status === "ok") {
+    snapshots = data.snapshots;
+    let html = "<h3>預覽圖與 Hash</h3>";
+    data.snapshots.forEach(s=>{
+      html += `<p><b>${s.filename}</b><br>SHA256: ${s.sha256}<br>大小: ${s.size_kb} KB</p>`;
+      const file = Array.from(document.getElementById("files").files).find(f=>f.name===s.filename);
+      const reader = new FileReader();
+      reader.onload = e=>{
+        const img = document.createElement("img");
+        img.src = e.target.result;
+        document.getElementById("previewArea").appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    });
+    document.getElementById("previewArea").innerHTML = html;
+    document.getElementById("generateBtn").style.display = "block";
+  }
+};
+
+document.getElementById("generateBtn").onclick = async ()=>{
+  const applicant = document.getElementById("applicant").value;
+  const payload = new FormData();
+  payload.append("data", JSON.stringify({applicant, snapshots}));
+  const res = await fetch("/generate", {method:"POST", body:payload});
+  const blob = await res.blob();
+  const link = document.createElement("a");
+  link.href = window.URL.createObjectURL(blob);
+  link.download = "WesmartAI_Report.pdf";
+  link.click();
+};
+</script>
 </body>
 </html>
