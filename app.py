@@ -1,90 +1,126 @@
-from flask import Flask, render_template, request, send_file, jsonify
+import os
+import hashlib
+import uuid
+from datetime import datetime
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 from fpdf import FPDF
-import os, hashlib, datetime
+import qrcode
 
-app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ---- 計算 SHA256 ----
-def calc_sha256(file_path):
-    h = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        while chunk := f.read(8192):
-            h.update(chunk)
-    return h.hexdigest()
+app = Flask(__name__)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+# ---- 讓 /uploads 可公開存取 ----
+@app.route("/uploads/<filename>")
+def uploaded_file(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
 
 # ---- 首頁 ----
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# ---- 圖片預覽 ----
+
+# ---- 上傳並產生預覽 ----
 @app.route("/preview", methods=["POST"])
 def preview():
     if "file" not in request.files:
         return jsonify({"error": "no file"}), 400
     file = request.files["file"]
     if file.filename == "":
-        return jsonify({"error": "no filename"}), 400
-    save_path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(save_path)
-    sha256 = calc_sha256(save_path)
-    return jsonify({"preview_url": f"/{save_path}", "sha256": sha256})
+        return jsonify({"error": "empty filename"}), 400
 
-# ---- 生成 PDF ----
+    filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+    file.save(filepath)
+
+    with open(filepath, "rb") as f:
+        sha256_hash = hashlib.sha256(f.read()).hexdigest()
+
+    return jsonify({
+        "preview_url": f"/uploads/{file.filename}",
+        "sha256": sha256_hash
+    })
+
+
+# ---- 生成正式版報告 ----
 @app.route("/generate", methods=["POST"])
 def generate_pdf():
-    data = request.json or {}
-    file_name = data.get("file_name", "")
-    sha256 = data.get("sha256", "")
-    timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    data = request.get_json()
+    file_name = data.get("file_name")
+    sha256_hash = data.get("sha256")
+    applicant = data.get("applicant", "N/A")
 
+    if not file_name or not sha256_hash:
+        return jsonify({"error": "Missing fields"}), 400
+
+    # 基本欄位
+    evidence_id = str(uuid.uuid4())
+    trace_token = hashlib.md5(evidence_id.encode()).hexdigest().upper()
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # 建立 PDF
     pdf = FPDF(format="A4")
     pdf.add_page()
 
-    # ---- LOGO 或標題 ----
-    if os.path.exists("LOGO.jpg"):
-        try:
-            pdf.image("LOGO.jpg", x=70, y=10, w=70)
-            pdf.ln(40)
-        except Exception as e:
-            print("Logo insert error:", e)
-            pdf.set_font("Helvetica", size=16)
-            pdf.cell(0, 10, "WesmartAI Third-Party Digital Evidence Report", ln=True, align="C")
-    else:
-        pdf.set_font("Helvetica", size=16)
-        pdf.cell(0, 10, "WesmartAI Third-Party Digital Evidence Report", ln=True, align="C")
+    # 字型
+    pdf.add_font("Taipei", "", "TaipeiSansTCBeta-Regular.ttf", uni=True)
+    pdf.set_font("Taipei", "", 14)
 
-    # ---- Metadata ----
+    # LOGO
+    if os.path.exists("LOGO.jpg"):
+        pdf.image("LOGO.jpg", x=80, y=10, w=50)
+    pdf.ln(35)
+
+    # 標題
+    pdf.set_font("Taipei", "", 18)
+    pdf.cell(0, 10, "WesmartAI Third-Party Digital Evidence Report", ln=True, align="C")
     pdf.ln(10)
-    pdf.set_font("Helvetica", size=12)
-    pdf.cell(0, 10, f"File: {file_name}", ln=True)
-    pdf.cell(0, 10, f"SHA256: {sha256}", ln=True)
+
+    # 主體資訊
+    pdf.set_font("Taipei", "", 12)
+    pdf.cell(0, 10, f"Evidence ID: {evidence_id}", ln=True)
+    pdf.cell(0, 10, f"Applicant: {applicant}", ln=True)
+    pdf.cell(0, 10, f"File Name: {file_name}", ln=True)
+    pdf.multi_cell(0, 10, f"SHA256: {sha256_hash}")
+    pdf.cell(0, 10, f"Trace Token: {trace_token}", ln=True)
     pdf.cell(0, 10, f"Timestamp: {timestamp}", ln=True)
 
-    # ---- 插入圖片 ----
-    img_path = os.path.join(UPLOAD_FOLDER, file_name)
+    pdf.ln(10)
+    pdf.cell(0, 10, "Preview Image:", ln=True)
+    pdf.ln(5)
+
+    img_path = os.path.join(app.config["UPLOAD_FOLDER"], file_name)
     if os.path.exists(img_path):
-        try:
-            pdf.image(img_path, x=25, y=80, w=160)
-        except Exception as e:
-            print("Image insert error:", e)
+        pdf.image(img_path, x=25, w=160)
+    pdf.ln(10)
 
-    pdf.ln(120)
-    pdf.set_font("Helvetica", size=11)
-    pdf.multi_cell(0, 8, (
-        "Creative Process Statement:\n"
-        "This report documents the digital evidence chain created by WesmartAI. "
-        "Each artifact includes a SHA256 hash and timestamp to ensure integrity, "
-        "traceability, and verifiable authorship."
-    ))
+    # QR Code (驗證連結)
+    verify_url = f"https://wesmartai.com/verify/{evidence_id}"
+    qr_path = os.path.join(UPLOAD_FOLDER, f"{evidence_id}.png")
+    qr = qrcode.make(verify_url)
+    qr.save(qr_path)
+    pdf.cell(0, 10, "Verification QR Code:", ln=True)
+    pdf.image(qr_path, x=80, w=50)
+    os.remove(qr_path)
 
-    out_path = os.path.join(UPLOAD_FOLDER, f"report_{file_name}.pdf")
-    pdf.output(out_path)
-    return send_file(out_path, as_attachment=True)
+    # 結論
+    pdf.ln(10)
+    pdf.set_font("Taipei", "", 11)
+    pdf.multi_cell(
+        0, 8,
+        "This report is automatically generated by the WesmartAI Digital Evidence System. "
+        "All information including hash values and timestamps are recorded for traceability and verification purposes. "
+        "The creation process is immutable and verifiable for evidential use."
+    )
 
-# ---- 啟動 ----
+    output_path = os.path.join(UPLOAD_FOLDER, f"report_{file_name}.pdf")
+    pdf.output(output_path)
+
+    return send_file(output_path, as_attachment=True)
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=10000)
