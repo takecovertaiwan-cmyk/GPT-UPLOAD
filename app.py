@@ -1,11 +1,12 @@
 # ====================================================================
-# WesmartAI 可信智慧科技三方存證系統 (整合 GPT-4 mini 公證)
+# WesmartAI 可信智慧科技三方存證系統 (整合 GPT-4 mini 公證 + 字型自動下載)
 # 作者: Gemini & User
 # 核心架構 (新版):
 # 1. 使用者上傳圖像後，系統在本地計算其雜湊值與時間戳。
 # 2. 系統立即呼叫 GPT-4 mini API，將雜湊值與時間戳傳送給 AI。
 # 3. GPT-4 mini 作為「數位公證人」回覆確認訊息。
 # 4. 此 AI 回覆將作為額外證據，與圖像原始資訊一同記錄在 PDF 報告中。
+# 5. 如果伺服器上沒有中文字型檔，系統會自動下載，增強部署穩健性。
 # ====================================================================
 
 import json, hashlib, uuid, datetime, os, io, base64
@@ -15,18 +16,16 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 import qrcode
 from werkzeug.utils import secure_filename
-import openai # <--- 新增 OpenAI 套件
+import openai
+import requests
 
 # --- 環境變數與 API Key 設定 ---
-# 請確保您已在環境中設定 OPENAI_API_KEY
-# 也可以直接在此處賦值: openai.api_key = "sk-..."
 try:
     openai.api_key = os.getenv("OPENAI_API_KEY")
     if not openai.api_key:
         print("警告：OPENAI_API_KEY 環境變數未設定。AI 公證功能將無法使用。")
 except Exception as e:
     print(f"讀取 OpenAI API Key 時發生錯誤: {e}")
-
 
 # --- Flask App 初始化 ---
 app = Flask(__name__)
@@ -45,14 +44,10 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-# --- 新增：呼叫 GPT-4 mini 進行公證 ---
+# --- 呼叫 GPT-4 mini 進行公證 ---
 def get_gpt_notarization(image_hash, timestamp_utc):
-    """
-    呼叫 GPT-4 mini API，請求對給定的雜湊值和時間戳進行公證。
-    """
     if not openai.api_key:
         return "錯誤：OpenAI API Key 未設定，無法進行 AI 公證。"
-        
     prompt_content = f"""
     作為一名專業的數位內容公證人，請為以下數位資產的存證事件提供一份標準的公證確認聲明。
     請在您的回覆中明確包含以下兩項核心資訊：
@@ -63,12 +58,12 @@ def get_gpt_notarization(image_hash, timestamp_utc):
     try:
         client = openai.OpenAI()
         response = client.chat.completions.create(
-            model="gpt-4o-mini", # 使用最新的 gpt-4o-mini 模型
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "你是一名數位內容公證人，職責是為收到的資料提供正式的確認聲明。"},
                 {"role": "user", "content": prompt_content}
             ],
-            temperature=0.2, # 降低隨機性，使回覆更穩定
+            temperature=0.2,
             max_tokens=200
         )
         return response.choices[0].message.content.strip()
@@ -76,18 +71,26 @@ def get_gpt_notarization(image_hash, timestamp_utc):
         print(f"呼叫 GPT-4 mini API 失敗: {e}")
         return f"AI 公證失敗：無法連接至 OpenAI 服務。錯誤: {str(e)}"
 
-# --- PDF 報告生成類別 (已修改以包含 AI 公證資訊) ---
+# --- PDF 報告生成類別 ---
 class WesmartPDFReport(FPDF):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not os.path.exists("NotoSansTC.otf"):
-            raise FileNotFoundError("錯誤：中文字型檔 'NotoSansTC.otf' 不存在。")
+            print("中文字型檔不存在，正在從網路下載...")
+            try:
+                font_url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/TraditionalChinese/NotoSansCJKtc-Regular.otf"
+                r = requests.get(font_url)
+                r.raise_for_status()
+                with open("NotoSansTC.otf", "wb") as f:
+                    f.write(r.content)
+                print("字型下載完成。")
+            except Exception as e:
+                print(f"字型下載失敗: {e}")
         self.add_font("NotoSansTC", "", "NotoSansTC.otf")
         self.set_auto_page_break(auto=True, margin=25)
         self.alias_nb_pages()
         self.logo_path = "LOGO.jpg" if os.path.exists("LOGO.jpg") else None
 
-    # header, footer, chapter_title, chapter_body, create_cover (與前版相同) ...
     def header(self):
         if self.logo_path:
             with self.local_context(fill_opacity=0.08, stroke_opacity=0.08):
@@ -133,10 +136,8 @@ class WesmartPDFReport(FPDF):
             self.cell(45, 10, row[0], align='L')
             self.multi_cell(0, 10, row[1], new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
 
-
     def create_evidence_pages(self, proof_data):
         self.chapter_title("一、存證圖像詳情")
-        # ... (此處與前版相同，顯示總覽資訊)
         experiment_meta = { "Trace Token": proof_data['event_proof']['trace_token'], "總共存證圖像數": len(proof_data['event_proof']['snapshots']) }
         for key, value in experiment_meta.items():
             self.set_font("NotoSansTC", "", 10)
@@ -153,8 +154,6 @@ class WesmartPDFReport(FPDF):
             self.set_text_color(0)
             self.cell(0, 10, f"圖像索引: {snapshot['version_index']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='L')
             self.ln(4)
-            
-            # --- 顯示本地計算的資訊 ---
             details = [("時間戳記 (UTC)", snapshot['timestamp_utc']),("圖像雜湊 (SHA-256)", snapshot['snapshot_hash'])]
             for key, value in details:
                 self.set_font("NotoSansTC", "", 10)
@@ -164,18 +163,14 @@ class WesmartPDFReport(FPDF):
                 self.set_text_color(80)
                 self.multi_cell(0, 7, str(value), align='L', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.ln(5)
-
-            # --- 新增：顯示 GPT-4 mini 的公證回覆 ---
             self.set_font("NotoSansTC", "", 10)
             self.set_text_color(0)
             self.cell(0, 7, "  - AI 公證記錄 (by GPT-4 mini):", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             self.set_font("NotoSansTC", "", 9)
             self.set_text_color(80)
-            with self.local_context(x=self.get_x() + 5): # 縮排
+            with self.local_context(x=self.get_x() + 5):
                  self.multi_cell(0, 6, snapshot.get('gpt_notarization', 'N/A'), border=1, padding=3)
             self.ln(10)
-
-            # --- 顯示預覽圖 ---
             try:
                 img_bytes = base64.b64decode(snapshot['content_base64'])
                 with Image.open(io.BytesIO(img_bytes)) as img:
@@ -189,7 +184,6 @@ class WesmartPDFReport(FPDF):
                 print(f"在PDF中顯示圖片失敗: {e}")
             self.ln(5)
     
-    # create_conclusion_page (與前版相同) ...
     def create_conclusion_page(self, proof_data):
         self.add_page()
         self.chapter_title("二、報告驗證")
@@ -200,22 +194,20 @@ class WesmartPDFReport(FPDF):
         self.cell(0, 10, "最終事件雜湊值 (Final Event Hash):", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.set_font("Courier", "B", 11)
         self.multi_cell(0, 8, proof_data['event_proof']['final_event_hash'], border=1, align='C', padding=5)
-        
         qr_data = proof_data['verification']['verify_url']
         qr = qrcode.make(qr_data)
         qr_path = os.path.join(app.config['UPLOAD_FOLDER'], f"qr_{proof_data['report_id'][:10]}.png")
         qr.save(qr_path)
-        
         self.ln(10)
         self.set_font("NotoSansTC", "", 10)
         self.cell(0, 10, "掃描 QR Code 前往驗證頁面", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         self.image(qr_path, w=50, x=(self.w - 50) / 2)
 
-
 # --- 全域變數 ---
 session_uploads = []
 latest_proof_data = None
 
+# --- Flask 路由函式 ---
 @app.route('/')
 def index():
     global session_uploads, latest_proof_data
@@ -223,7 +215,6 @@ def index():
     latest_proof_data = None
     return render_template('index.html')
 
-# 步驟1: 上傳圖像檔案 (已修改)
 @app.route('/upload', methods=['POST'])
 def upload_image():
     if 'image' not in request.files: return jsonify({"error": "請求中未包含圖像檔案"}), 400
@@ -232,30 +223,22 @@ def upload_image():
     
     if file and allowed_file(file.filename):
         try:
-            # 儲存檔案
             original_filename = secure_filename(file.filename)
             unique_filename = f"{uuid.uuid4().hex}_{original_filename}"
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
             file.save(filepath)
-
-            # 計算本地雜湊與時間戳
             with open(filepath, "rb") as f: img_bytes = f.read()
             file_hash = sha256_bytes(img_bytes)
             timestamp_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
-
-            # *** 核心修改：呼叫 GPT-4 mini 進行公證 ***
             print(f"正在為圖像 {file_hash[:10]}... 請求 AI 公證...")
             gpt_response = get_gpt_notarization(file_hash, timestamp_utc)
             print(f"AI 公證完成。")
-
-            # 將所有資訊加入 session
             session_uploads.append({
                 "filepath": filepath,
                 "file_hash": file_hash,
                 "timestamp_utc": timestamp_utc,
-                "gpt_notarization": gpt_response # <-- 儲存 AI 回覆
+                "gpt_notarization": gpt_response
             })
-            
             return jsonify({
                 "success": True,
                 "preview_url": url_for('static_preview', filename=unique_filename),
@@ -266,7 +249,6 @@ def upload_image():
     else:
         return jsonify({"error": "不支援的檔案類型"}), 400
 
-# 步驟2: 結束任務 (已修改以包含 AI 公證資訊)
 @app.route('/finalize_session', methods=['POST'])
 def finalize_session():
     global latest_proof_data, session_uploads
@@ -279,43 +261,34 @@ def finalize_session():
         for i, upload in enumerate(session_uploads):
             with open(upload['filepath'], "rb") as f: definitive_bytes = f.read()
             img_base64_str = base64.b64encode(definitive_bytes).decode('utf-8')
-            
             snapshots.append({
                 "version_index": i + 1,
                 "timestamp_utc": upload['timestamp_utc'],
                 "snapshot_hash": upload['file_hash'],
-                "gpt_notarization": upload['gpt_notarization'], # <-- 將 AI 回覆加入證據
+                "gpt_notarization": upload['gpt_notarization'],
                 "content_base64": img_base64_str
             })
-        
-        # ... (後續的雜湊計算與 JSON 生成邏輯與前版相同)
         report_id = str(uuid.uuid4())
         trace_token = str(uuid.uuid4())
         issued_at_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        
         temp_proof_for_hashing = {"report_id": report_id, "event_proof": {"trace_token": trace_token, "snapshots": snapshots}}
         proof_string_for_hashing = json.dumps(temp_proof_for_hashing, sort_keys=True, ensure_ascii=False).encode('utf-8')
         final_event_hash = sha256_bytes(proof_string_for_hashing)
-
         proof_data = {
             "report_id": report_id, "issuer": "WesmartAI Inc.", "applicant": applicant_name, "issued_at": issued_at_iso,
             "event_proof": { "trace_token": trace_token, "final_event_hash": final_event_hash, "snapshots": snapshots },
             "verification": {"verify_url": f"https://wesmart.ai/verify?hash={final_event_hash}"}
         }
-        
         json_filename = f"proof_event_{report_id}.json"
         json_filepath = os.path.join(app.config['UPLOAD_FOLDER'], json_filename)
         with open(json_filepath, 'w', encoding='utf-8') as f:
             json.dump(proof_data, f, ensure_ascii=False, indent=2)
-
         latest_proof_data = proof_data
         return jsonify({"success": True, "report_id": report_id})
-
     except Exception as e:
         print(f"結束任務失敗: {e}")
         return jsonify({"error": f"結束任務失敗: {str(e)}"}), 500
 
-# 步驟3: 產生 PDF 報告 (邏輯不變，但會使用更新後的 PDF 類別)
 @app.route('/create_report', methods=['POST'])
 def create_report():
     if not latest_proof_data:
@@ -334,7 +307,6 @@ def create_report():
         print(f"報告生成失敗: {e}")
         return jsonify({"error": f"報告生成失敗: {str(e)}"}), 500
 
-# --- 靜態檔案路由 (與前版相同) ---
 @app.route('/static/preview/<path:filename>')
 def static_preview(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
