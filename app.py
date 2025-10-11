@@ -1,95 +1,88 @@
-from flask import Flask, render_template, request, send_file, jsonify, send_from_directory
-import hashlib, os
+from flask import Flask, render_template, request, send_file, jsonify
 from fpdf import FPDF
-from PIL import Image
-from datetime import datetime
+import os, hashlib, datetime
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# ---- 計算 SHA256 ----
 def calc_sha256(file_path):
+    h = hashlib.sha256()
     with open(file_path, "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
+        while chunk := f.read(8192):
+            h.update(chunk)
+    return h.hexdigest()
 
-def resize_image(path, max_width=800):
-    try:
-        img = Image.open(path)
-        if img.width > max_width:
-            ratio = max_width / float(img.width)
-            new_height = int(float(img.height) * ratio)
-            img = img.resize((max_width, new_height))
-            img.save(path)
-    except Exception:
-        pass
-
+# ---- 頁面 ----
 @app.route("/")
 def index():
     return render_template("index.html")
 
-@app.route("/uploads/<path:filename>")
-def serve_upload(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
-
+# ---- 預覽 ----
 @app.route("/preview", methods=["POST"])
 def preview():
-    files = request.files.getlist("files")
-    previews = []
-    for f in files:
-        save_path = os.path.join(UPLOAD_FOLDER, f.filename)
-        f.save(save_path)
-        resize_image(save_path)
-        sha256_hash = calc_sha256(save_path)
-        file_size = os.path.getsize(save_path)
-        previews.append({
-            "filename": f.filename,
-            "sha256": sha256_hash,
-            "size": f"{file_size / 1024:.2f} KB"
-        })
-    return jsonify(previews)
+    if "file" not in request.files:
+        return jsonify({"error": "no file"}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "no filename"}), 400
+    save_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(save_path)
+    sha256 = calc_sha256(save_path)
+    return jsonify({"preview_url": f"/{save_path}", "sha256": sha256})
 
+# ---- 生成 PDF ----
 @app.route("/generate", methods=["POST"])
 def generate_pdf():
-    applicant = request.form.get("applicant", "未命名")
-    file_list = os.listdir(UPLOAD_FOLDER)
+    data = request.json or {}
+    file_name = data.get("file_name", "")
+    sha256 = data.get("sha256", "")
+    timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    pdf = FPDF()
+    pdf = FPDF(format="A4")
     pdf.add_page()
-    try:
-        pdf.add_font("NotoSansTC", "", "NotoSansTC.otf", uni=True)
-        pdf.set_font("NotoSansTC", size=12)
-    except Exception:
-        pdf.set_font("Helvetica", size=12)
 
-    pdf.cell(0, 10, "WesmartAI 數位證據第三方存證報告", ln=True, align="C")
-    pdf.cell(0, 10, f"出證申請人：{applicant}", ln=True)
-    pdf.cell(0, 10, f"生成時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
-    pdf.ln(10)
-
-    for filename in file_list:
-        path = os.path.join(UPLOAD_FOLDER, filename)
-        if not os.path.isfile(path):
-            continue
-        sha256_hash = calc_sha256(path)
-        pdf.cell(0, 10, f"檔名：{filename}", ln=True)
-        pdf.multi_cell(0, 10, f"SHA256：{sha256_hash}")
-        pdf.ln(3)
+    # 嘗試插入 LOGO
+    if os.path.exists("LOGO.jpg"):
         try:
-            pdf.image(path, w=100)
-        except Exception:
-            pass
-        pdf.ln(5)
+            pdf.image("LOGO.jpg", x=70, y=10, w=70)
+            pdf.ln(40)
+        except Exception as e:
+            print("Logo insert error:", e)
+            pdf.set_font("Helvetica", size=16)
+            pdf.cell(0, 10, "WesmartAI Digital Evidence Report", ln=True, align="C")
+    else:
+        pdf.set_font("Helvetica", size=16)
+        pdf.cell(0, 10, "WesmartAI Digital Evidence Report", ln=True, align="C")
 
     pdf.ln(10)
-    pdf.multi_cell(0, 10,
-        "創作歷程說明：\n"
-        "本報告封存自使用者之創意輸入（檔案）起始，並記錄其雜湊值（Hash）與時間戳。"
-        "生成過程具人為主導性與可驗證性，可用於佐證創作歷程與權屬歸屬。"
-    )
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(0, 10, f"File: {file_name}", ln=True)
+    pdf.cell(0, 10, f"SHA256: {sha256}", ln=True)
+    pdf.cell(0, 10, f"Timestamp: {timestamp}", ln=True)
 
-    output_path = os.path.join(UPLOAD_FOLDER, f"WesmartAI_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
-    pdf.output(output_path)
-    return send_file(output_path, as_attachment=True)
+    # 嵌入圖片預覽
+    img_path = os.path.join(UPLOAD_FOLDER, file_name)
+    if os.path.exists(img_path):
+        try:
+            pdf.image(img_path, x=25, y=80, w=160)
+        except Exception as e:
+            print("Image insert error:", e)
 
+    pdf.ln(120)
+    pdf.set_font("Helvetica", size=11)
+    pdf.multi_cell(0, 8, (
+        "Creative Process Statement:\n"
+        "This report records the digital evidence chain starting from user input. "
+        "Each artifact includes hash and timestamp to ensure integrity and verifiability."
+    ))
+
+    out_path = os.path.join(UPLOAD_FOLDER, f"report_{file_name}.pdf")
+    pdf.output(out_path)
+    return send_file(out_path, as_attachment=True)
+
+# ---- 啟動 ----
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
