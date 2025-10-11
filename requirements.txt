@@ -1,4 +1,5 @@
-Flask
-fpdf2
-Pillow
-qrcode
+Flask==3.0.3
+gunicorn==22.0.0
+fpdf2==2.7.8
+qrcode==7.4.2
+Pillow==10.4.0
