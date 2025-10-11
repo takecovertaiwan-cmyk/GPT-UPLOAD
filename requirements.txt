@@ -2,3 +2,5 @@ flask
 fpdf2
 openai>=1.0.0
 gunicorn
+qrcode
+pillow
