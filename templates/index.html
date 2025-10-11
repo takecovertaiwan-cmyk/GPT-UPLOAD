@@ -1,76 +1,14 @@
-import os, uuid, hashlib, base64, json
-from datetime import datetime, UTC
-from flask import Flask, request, jsonify, render_template
-from fpdf import FPDF
-from openai import OpenAI
-
-app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# 初始化 GPT 客戶端，從 Render 環境變數讀取
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    file = request.files['file']
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(filepath)
-
-    # 計算雜湊
-    with open(filepath, "rb") as f:
-        file_bytes = f.read()
-    sha256_hash = hashlib.sha256(file_bytes).hexdigest()
-    timestamp = datetime.now(UTC).isoformat()
-    trace_token = str(uuid.uuid4())
-
-    # 呼叫 GPT 產出摘要說明
-    prompt = f"""請生成一段50字以內的中文說明：
-    說明這份媒體檔案封存於 {timestamp}，
-    雜湊值為 {sha256_hash[:16]}...，
-    可用於後續驗證其真實性。"""
-    gpt_resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0
-    )
-    summary = gpt_resp.choices[0].message.content.strip()
-
-    # 建立 JSON 資料
-    meta = {
-        "trace_token": trace_token,
-        "timestamp": timestamp,
-        "file_name": file.filename,
-        "size_kb": round(len(file_bytes)/1024, 2),
-        "sha256_hash": sha256_hash,
-        "gpt_summary": summary
-    }
-
-    json_path = os.path.join(UPLOAD_FOLDER, f"proof_event_{trace_token}.json")
-    with open(json_path, "w", encoding="utf-8") as jf:
-        json.dump(meta, jf, indent=2, ensure_ascii=False)
-
-    # 生成報告 PDF
-    pdf_path = os.path.join(UPLOAD_FOLDER, f"WesmartAI_Report_{trace_token}.pdf")
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt="WesmartAI 生成式 AI 證據報告", ln=True, align='C')
-    pdf.ln(10)
-    for k, v in meta.items():
-        pdf.multi_cell(0, 8, txt=f"{k}: {v}")
-    pdf.output(pdf_path)
-
-    return jsonify({
-        "status": "ok",
-        "trace_token": trace_token,
-        "summary": summary,
-        "report": pdf_path
-    })
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>WesmartAI 圖片封存測試</title>
+</head>
+<body>
+  <h2>上傳圖片產生封存報告</h2>
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept="image/*" required>
+    <input type="submit" value="上傳並封存">
+  </form>
+</body>
+</html>
