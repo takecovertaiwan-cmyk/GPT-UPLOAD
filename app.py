@@ -1,5 +1,5 @@
 # ====================================================================
-# WesmartAI 可信智慧科技三方存證系統 (整合 GPT-4 mini 公證)
+# WesmartAI 數位證據三方存證系統 (整合 GPT-4 mini 公證)
 # 作者: Gemini & User
 # ====================================================================
 
@@ -10,14 +10,14 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 import qrcode
 from werkzeug.utils import secure_filename
-from openai import OpenAI  # ✅ 修正：新版 openai 套件使用 OpenAI 類別初始化
+from openai import OpenAI  # ✅ 修正後的 OpenAI 匯入
 
-# --- 環境變數與 API Key 設定 ---
+# --- OpenAI API Key 設定 ---
 try:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     if not OPENAI_API_KEY:
         print("警告：OPENAI_API_KEY 環境變數未設定。AI 公證功能將無法使用。")
-    client = OpenAI(api_key=OPENAI_API_KEY)  # ✅ 修正初始化方式
+    client = OpenAI(api_key=OPENAI_API_KEY)
 except Exception as e:
     print(f"讀取 OpenAI API Key 時發生錯誤: {e}")
     client = None
@@ -40,7 +40,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 
-# --- 呼叫 GPT-4 mini 進行公證 ---
+# --- GPT-4 mini 公證 ---
 def get_gpt_notarization(image_hash, timestamp_utc):
     if not client or not OPENAI_API_KEY:
         return "錯誤：OpenAI API Key 未設定，無法進行 AI 公證。"
@@ -50,7 +50,7 @@ def get_gpt_notarization(image_hash, timestamp_utc):
     請在您的回覆中明確包含以下兩項核心資訊：
     1.  **圖像雜湊值 (SHA-256)**: `{image_hash}`
     2.  **存證時間戳 (UTC)**: `{timestamp_utc}`
-    請以簡潔、正式的格式回覆，確認您已記錄此事件。
+    請以正式、簡潔的中文撰寫確認聲明。
     """
 
     try:
@@ -73,7 +73,6 @@ def get_gpt_notarization(image_hash, timestamp_utc):
 class WesmartPDFReport(FPDF):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # ✅ 改進字型路徑偵測：允許 static/fonts 或同層路徑
         font_candidates = [
             "NotoSansTC.otf",
             os.path.join("static", "fonts", "NotoSansTC.otf"),
@@ -88,15 +87,18 @@ class WesmartPDFReport(FPDF):
         self.alias_nb_pages()
         self.logo_path = "LOGO.jpg" if os.path.exists("LOGO.jpg") else None
 
+    # ✅ LOGO 浮水印
     def header(self):
         if self.logo_path:
-            with self.local_context(fill_opacity=0.08, stroke_opacity=0.08):
-                img_w, center_x, center_y = 120, (self.w - 120) / 2, (self.h - 120) / 2
+            with self.local_context(fill_opacity=0.12, stroke_opacity=0.12):
+                img_w = 150
+                center_x = (self.w - img_w) / 2
+                center_y = (self.h - img_w) / 2
                 self.image(self.logo_path, x=center_x, y=center_y, w=img_w)
         if self.page_no() > 1:
             self.set_font("NotoSansTC", "", 9)
             self.set_text_color(128)
-            self.cell(0, 10, "WesmartAI 可信智慧科技三方存證報告", new_x=XPos.LMARGIN, new_y=YPos.TOP, align='L')
+            self.cell(0, 10, "WesmartAI 數位證據三方存證報告", new_x=XPos.LMARGIN, new_y=YPos.TOP, align='L')
             self.cell(0, 10, "WesmartAI Inc.", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='R')
 
     def footer(self):
@@ -122,8 +124,8 @@ class WesmartPDFReport(FPDF):
         if self.logo_path:
             self.image(self.logo_path, x=(self.w - 60) / 2, y=25, w=60)
         self.set_y(100)
-        self.set_font("NotoSansTC", "", 28)
-        self.cell(0, 20, "WesmartAI 存證報告", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+        self.set_font("NotoSansTC", "", 26)
+        self.cell(0, 20, "WesmartAI 數位證據三方存證報告", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         self.ln(20)
         self.set_font("NotoSansTC", "", 12)
         data = [
@@ -188,7 +190,7 @@ class WesmartPDFReport(FPDF):
     def create_conclusion_page(self, proof_data):
         self.add_page()
         self.chapter_title("二、報告驗證")
-        self.chapter_body("本報告的真實性與完整性，取決於其對應的 `proof_event.json` 證據檔案。")
+        self.chapter_body("本報告之真實性與完整性可透過對應的 `proof_event.json` 檔案驗證。")
         self.ln(10)
         self.set_font("NotoSansTC", "", 12)
         self.cell(0, 10, "最終事件雜湊值 (Final Event Hash):", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
