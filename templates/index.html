@@ -3,170 +3,351 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WesmartAI 可信智慧科技三方存證系統</title>
+    <title>WesmartAI 數位證據三方存證系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/kjua/0.9.0/kjua.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 2em; background-color: #f4f6f8; color: #333; }
-        .container { max-width: 900px; margin: auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        h1, h2 { color: #1a237e; text-align: center; }
-        .form-grid { display: grid; grid-template-columns: 1fr; gap: 1.5em; margin-bottom: 1.5em; }
-        .form-group { display: flex; flex-direction: column; }
-        .full-width { grid-column: 1 / -1; }
-        label { font-weight: 600; margin-bottom: 0.5em; color: #555; }
-        input, button { font-size: 1em; padding: 0.8em; border-radius: 6px; border: 1px solid #ccc; }
-        button { background-color: #3f51b5; color: white; border: none; cursor: pointer; font-weight: bold; transition: background-color 0.2s ease; }
-        button:hover { background-color: #303f9f; }
-        button:disabled { background-color: #9fa8da; cursor: not-allowed; }
-        #generate-report-btn { background-color: #00796b; }
-        #generate-report-btn:hover { background-color: #004d40; }
-        #results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5em; margin-top: 1.5em; }
-        .result-card { border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
-        .result-card img { max-width: 100%; height: auto; display: block; }
-        .result-card p { padding: 1em; margin: 0; background: #fafafa; font-size: 0.9em; }
-        .spinner { margin: 2em auto; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #3f51b5; border-radius: 50%; animation: spin 1s linear infinite; display: none; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #status { text-align: center; margin-top: 1em; font-weight: 500; min-height: 1.2em; }
-        hr { border: none; height: 1px; background-color: #e0e0e0; margin: 2em 0; }
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+        }
+        /* 用於生成 PDF 的報告頁面樣式 */
+        .report-page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 20mm;
+            margin: 1cm auto;
+            border: 1px #D1D5DB solid;
+            background: white;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            color: #1f2937;
+            font-family: 'Noto Sans TC', sans-serif;
+        }
+        .report-header, .report-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 8px;
+        }
+        .report-footer {
+            padding-top: 8px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 12px;
+            color: #6b7280;
+        }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h1>WesmartAI<br>可信智慧科技三方存證系統</h1>
-        
-        <h2>1. 上傳存證圖像</h2>
-        <div class="form-grid">
-            <div class="form-group full-width">
-                <label for="applicant_name">出證申請人名稱</label>
-                <input type="text" id="applicant_name" placeholder="請在此處輸入您的姓名或公司名稱">
-            </div>
-            <input type="file" id="image-input" accept="image/*" style="display: none;">
-            
-            <div class="form-group full-width">
-                <button id="upload-btn">上傳圖像</button>
-            </div>
-        </div>
-        
-        <div id="spinner" class="spinner"></div>
-        <div id="status"></div>
-        <div id="results-grid"></div>
+<body class="bg-gray-100 text-gray-800">
 
-        <hr>
+    <div id="app" class="container mx-auto p-4 md:p-8 max-w-4xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">WesmartAI<br>數位證據三方存證系統</h1>
+            <p class="text-gray-500 mt-2">上傳您的數位檔案，系統將為您即時擷取時間戳、計算雜湊值，並生成公正的數位存證報告。</p>
+        </header>
 
-        <h2>2. 生成PDF報告</h2>
-        <div class="form-group full-width">
-             <button id="generate-report-btn" disabled>生成PDF存證報告</button>
-        </div>
+        <main class="bg-white p-6 rounded-2xl shadow-lg">
+            <div class="mb-6">
+                <label for="applicantName" class="block text-lg font-medium text-gray-700 mb-2">1. 請輸入申請人姓名</label>
+                <input type="text" id="applicantName" placeholder="例如：王小明" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-lg font-medium text-gray-700 mb-2">2. 請上傳圖片證據 (可多選)</label>
+                <div id="dropzone" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 hover:bg-gray-50 transition">
+                    <input type="file" id="fileUpload" multiple accept="image/*" class="hidden">
+                    <div class="text-gray-500">
+                        <svg class="mx-auto h-12 w-12" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        <p class="mt-2">點擊此處選擇檔案，或將檔案拖曳至此</p>
+                        <p class="text-xs text-gray-400 mt-1">支援 PNG, JPG, GIF 等圖片格式</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="preview-section" class="mb-6 hidden">
+                <h3 class="text-lg font-medium text-gray-700 mb-2">3. 檔案預覽與雜湊值</h3>
+                <div id="preview" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    </div>
+            </div>
+
+            <div class="text-center mt-8">
+                <button id="generateReportBtn" disabled class="w-full md:w-auto bg-blue-600 text-white font-bold py-3 px-8 rounded-lg shadow-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none transition-all transform hover:scale-105">
+                    <span id="btn-text">生成存證報告</span>
+                    <span id="btn-loader" class="hidden">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        報告生成中...
+                    </span>
+                </button>
+            </div>
+        </main>
     </div>
 
-    <script>
-        const uploadBtn = document.getElementById('upload-btn');
-        const imageInput = document.getElementById('image-input');
-        const generateReportBtn = document.getElementById('generate-report-btn');
-        const spinner = document.getElementById('spinner');
-        const statusEl = document.getElementById('status');
-        const resultsGrid = document.getElementById('results-grid');
+    <div id="report-container" class="hidden fixed -left-[9999px] top-0 bg-gray-200 p-8">
+        </div>
 
-        function downloadFile(url) {
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = url.split('/').pop();
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+
+    <script>
+        // --- 全域狀態管理 ---
+        const appState = {
+            applicantName: '',
+            files: [], // { id, file, dataURL, timestamp, hash }
+        };
+
+        // --- DOM 元素 ---
+        const applicantNameInput = document.getElementById('applicantName');
+        const fileUpload = document.getElementById('fileUpload');
+        const dropzone = document.getElementById('dropzone');
+        const previewSection = document.getElementById('preview-section');
+        const preview = document.getElementById('preview');
+        const generateReportBtn = document.getElementById('generateReportBtn');
+        const reportContainer = document.getElementById('report-container');
+
+        // --- 事件監聽 ---
+        applicantNameInput.addEventListener('input', (e) => {
+            appState.applicantName = e.target.value.trim();
+            updateReportButtonState();
+        });
+
+        dropzone.addEventListener('click', () => fileUpload.click());
+        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('border-blue-500', 'bg-gray-50'); });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('border-blue-500', 'bg-gray-50'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('border-blue-500', 'bg-gray-50');
+            if (e.dataTransfer.files.length) {
+                fileUpload.files = e.dataTransfer.files;
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+        fileUpload.addEventListener('change', (e) => handleFiles(e.target.files));
+        generateReportBtn.addEventListener('click', generateReport);
+
+        // --- 核心功能函式 ---
+        function updateReportButtonState() {
+            generateReportBtn.disabled = !(appState.applicantName && appState.files.length > 0);
         }
 
-        // --- 步驟 1: 觸發檔案選擇 & 上傳圖像 ---
-        uploadBtn.addEventListener('click', () => {
-            imageInput.click(); // 點擊按鈕時，觸發隱藏的 input file
-        });
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            previewSection.classList.remove('hidden');
+            
+            for (const file of files) {
+                const fileId = uuid.v4();
+                const fileInfo = { id: fileId, file, timestamp: new Date().toISOString(), hash: '計算中...' };
+                appState.files.push(fileInfo);
+                renderPreviewCard(fileInfo);
 
-        imageInput.addEventListener('change', async () => {
-            if (imageInput.files.length === 0) {
-                return; // 使用者未選擇檔案
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const dataURL = e.target.result;
+                    const arrayBuffer = await file.arrayBuffer();
+                    const wordArray = CryptoJS.lib.WordArray.create(arrayBuffer);
+                    const hash = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
+
+                    const fileIndex = appState.files.findIndex(f => f.id === fileId);
+                    if (fileIndex !== -1) {
+                        appState.files[fileIndex].dataURL = dataURL;
+                        appState.files[fileIndex].hash = hash;
+                        updatePreviewCard(fileId, dataURL, hash);
+                    }
+                    updateReportButtonState();
+                };
+                reader.readAsDataURL(file);
             }
+        }
 
-            const file = imageInput.files[0];
-            const formData = new FormData();
-            formData.append('image', file);
+        function renderPreviewCard(fileInfo) {
+            const card = document.createElement('div');
+            card.id = `card-${fileInfo.id}`;
+            card.className = 'border border-gray-200 rounded-lg p-3 shadow-sm bg-white overflow-hidden';
+            card.innerHTML = `
+                <div class="w-full h-40 bg-gray-200 animate-pulse rounded-md flex items-center justify-center"></div>
+                <div class="mt-2 text-sm">
+                    <p class="font-medium text-gray-800 truncate" title="${fileInfo.file.name}">${fileInfo.file.name}</p>
+                    <p class="text-gray-500 text-xs">${(fileInfo.file.size / 1024).toFixed(2)} KB</p>
+                    <div class="mt-2 text-xs break-all">
+                        <p class="font-semibold text-gray-600">SHA-256:</p>
+                        <p id="hash-${fileInfo.id}" class="text-gray-500 font-mono">${fileInfo.hash}</p>
+                    </div>
+                </div>
+            `;
+            preview.appendChild(card);
+        }
 
-            spinner.style.display = 'block';
-            statusEl.textContent = '正在上傳圖像並計算雜湊值...';
-            uploadBtn.disabled = true;
-
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData, // 當使用 FormData 時，瀏覽器會自動設定正確的 Content-Type
-                });
-                const result = await response.json();
-                
-                if (response.ok) {
-                    statusEl.textContent = `✅ 圖像 ${result.version} 上傳成功。`;
-                    const card = document.createElement('div');
-                    card.className = 'result-card';
-                    card.innerHTML = `<img src="${result.preview_url}" alt="Preview ${result.version}"><p>圖像 ${result.version}</p>`;
-                    resultsGrid.appendChild(card);
-                    generateReportBtn.disabled = false; // 啟用生成報告按鈕
-                } else {
-                    throw new Error(result.error || '圖像上傳失敗');
-                }
-            } catch (error) {
-                statusEl.textContent = `❌ 錯誤: ${error.message}`;
-            } finally {
-                spinner.style.display = 'none';
-                uploadBtn.disabled = false;
-                imageInput.value = ''; // 清空 input，以便可以再次上傳同一個檔案
+        function updatePreviewCard(fileId, dataURL, hash) {
+            const card = document.getElementById(`card-${fileId}`);
+            if (!card) return;
+            const imgContainer = card.querySelector('.animate-pulse');
+            if (imgContainer) {
+                imgContainer.classList.remove('animate-pulse', 'bg-gray-200');
+                imgContainer.innerHTML = `<img src="${dataURL}" class="w-full h-full object-cover" alt="Preview">`;
             }
-        });
+            const hashEl = document.getElementById(`hash-${fileId}`);
+            if(hashEl) hashEl.textContent = hash;
+        }
 
-        // --- 步驟 2: 封裝證據並生成報告 (合併流程) ---
-        generateReportBtn.addEventListener('click', async () => {
-            const applicantName = document.getElementById('applicant_name').value;
-             if (!applicantName) {
-                alert('請確認「出證申請人名稱」已填寫！');
-                return;
-            }
-
-            spinner.style.display = 'block';
-            uploadBtn.disabled = true;
+        async function generateReport() {
+            const btnText = document.getElementById('btn-text');
+            const btnLoader = document.getElementById('btn-loader');
+            
             generateReportBtn.disabled = true;
+            btnText.classList.add('hidden');
+            btnLoader.classList.remove('hidden');
 
             try {
-                // Step A: Finalize Session
-                statusEl.textContent = '正在封裝所有上傳的證據...';
-                const finalizeResponse = await fetch('/finalize_session', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ applicant_name: applicantName }),
-                });
-                const finalizeResult = await finalizeResponse.json();
-                if (!finalizeResponse.ok) {
-                    throw new Error(finalizeResult.error || '封裝證據失敗');
-                }
-                statusEl.textContent = '✅ 證據封裝完畢，正在生成 PDF 報告...';
+                // 1. 準備報告資料
+                const reportId = uuid.v4();
+                const reportTimestamp = new Date().toISOString();
+                const reportData = {
+                    reportId,
+                    reportTimestamp,
+                    applicantName: appState.applicantName,
+                    snapshots: appState.files.map((f, index) => ({
+                        index: index + 1,
+                        timestamp: f.timestamp,
+                        hash: f.hash,
+                        filename: f.file.name,
+                        dataURL: f.dataURL
+                    }))
+                };
+                // 移除圖片內容後計算最終雜湊，以確保穩定
+                const dataForHashing = { ...reportData };
+                dataForHashing.snapshots = dataForHashing.snapshots.map(({ dataURL, ...rest }) => rest);
+                const finalHash = CryptoJS.SHA256(JSON.stringify(dataForHashing, null, 2)).toString(CryptoJS.enc.Hex);
 
-                // Step B: Create Report
-                const reportResponse = await fetch('/create_report', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                });
-                const reportResult = await reportResponse.json();
-                if (!reportResponse.ok) {
-                    throw new Error(reportResult.error || '報告生成失敗');
+                // 2. 生成報告的 HTML 內容
+                buildReportHTML(reportData, finalHash);
+
+                // 3. 使用 html2canvas 和 jsPDF 生成 PDF
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pages = reportContainer.querySelectorAll('.report-page');
+                
+                for (let i = 0; i < pages.length; i++) {
+                    const canvas = await html2canvas(pages[i], {
+                        scale: 2, // 提高解析度
+                        useCORS: true,
+                        logging: false,
+                        onclone: (doc) => {
+                            // 確保字體在 canvas 中正確渲染
+                            const fontLink = doc.createElement('link');
+                            fontLink.rel = 'stylesheet';
+                            fontLink.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap';
+                            doc.head.appendChild(fontLink);
+                        }
+                    });
+                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                    if (i > 0) pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
                 }
                 
-                statusEl.textContent = 'PDF 報告生成完畢，即將下載。';
-                downloadFile(reportResult.report_url);
+                pdf.save(`WesmartAI_Report_${reportId.slice(0, 8)}.pdf`);
 
             } catch (error) {
-                statusEl.textContent = `❌ 錯誤: ${error.message}`;
+                console.error("生成報告失敗:", error);
+                alert("抱歉，生成報告時發生錯誤，請檢查主控台以獲取更多資訊。");
             } finally {
-                spinner.style.display = 'none';
-                // 根據您的需求，決定流程結束後是否要重新啟用按鈕
-                // 由於是最終步驟，通常可以保持禁用狀態，鼓勵使用者重新整理頁面開始新任務
-                // uploadBtn.disabled = false;
-                // generateReportBtn.disabled = false;
+                generateReportBtn.disabled = false;
+                btnText.classList.remove('hidden');
+                btnLoader.classList.add('hidden');
             }
-        });
+        }
+
+        function buildReportHTML(reportData, finalHash) {
+            const totalPages = 2 + reportData.snapshots.length; // 1 (首頁) + N (證據頁) + 1 (末頁)
+            // 首頁
+            let html = `
+            <div class="report-page flex flex-col justify-between">
+                <div>
+                    <div class="report-header">
+                        <div class="text-2xl font-bold text-blue-600">WesmartAI</div>
+                        <div class="text-sm text-gray-500">Making Trust Transparent.</div>
+                    </div>
+                    <div class="mt-20">
+                        <h2 class="text-4xl font-bold text-center">WesmartAI 生成式 AI 證據報告</h2>
+                        <table class="mt-16 w-full text-lg">
+                            <tbody>
+                                <tr class="border-b"><td class="py-4 font-semibold w-1/3">出證申請人:</td><td class="py-4">${reportData.applicantName}</td></tr>
+                                <tr class="border-b"><td class="py-4 font-semibold">申請事項:</td><td class="py-4">WesmartAI 數位檔案存證報告</td></tr>
+                                <tr class="border-b"><td class="py-4 font-semibold">出證時間:</td><td class="py-4 font-mono">${reportData.reportTimestamp}</td></tr>
+                                <tr class="border-b"><td class="py-4 font-semibold">出證編號 (報告ID):</td><td class="py-4 font-mono">${reportData.reportId}</td></tr>
+                                <tr><td class="py-4 font-semibold">出證單位:</td><td class="py-4">WesmartAI Inc.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="report-footer">
+                    <span>WesmartAI Inc.</span>
+                    <span>第 1 / ${totalPages} 頁</span>
+                </div>
+            </div>`;
+
+            // 證據頁
+            reportData.snapshots.forEach((snapshot, i) => {
+                html += `
+                <div class="report-page flex flex-col justify-between">
+                    <div>
+                        <div class="report-header">
+                            <div class="text-xl font-bold">WesmartAI 證據報告</div>
+                        </div>
+                        <h3 class="text-2xl font-semibold mt-8 mb-4 border-b pb-2">證據快照 (版本索引: ${snapshot.index})</h3>
+                        <div class="my-6 p-4 border rounded-lg">
+                            <img src="${snapshot.dataURL}" class="max-w-full max-h-[140mm] mx-auto" />
+                        </div>
+                        <table class="w-full text-sm">
+                            <tbody>
+                                <tr class="border-b"><td class="py-3 font-semibold w-1/4">時間戳記 (UTC):</td><td class="py-3 font-mono">${snapshot.timestamp}</td></tr>
+                                <tr class="border-b"><td class="py-3 font-semibold">檔案名稱:</td><td class="py-3">${snapshot.filename}</td></tr>
+                                <tr><td class="py-3 font-semibold align-top">圖像雜湊 (SHA-256):</td><td class="py-3 font-mono break-all">${snapshot.hash}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="report-footer">
+                        <span>WesmartAI Inc.</span>
+                        <span>第 ${2 + i} / ${totalPages} 頁</span>
+                    </div>
+                </div>`;
+            });
+            
+            // 末頁
+            const qrEl = kjua({ text: `https://wesmart.ai/verify?hash=${finalHash}`, size: 200, render: 'svg' });
+            html += `
+            <div class="report-page flex flex-col justify-between">
+                <div>
+                    <div class="report-header">
+                        <div class="text-xl font-bold">WesmartAI 證據報告</div>
+                    </div>
+                    <h3 class="text-2xl font-semibold mt-8 mb-4 border-b pb-2">三、報告驗證</h3>
+                    <p class="text-gray-600 mt-4">本報告的真實性與完整性，取決於其對應的數位證據檔案。此報告所有快照資訊的最終雜湊值被記錄於下，可用於比對與驗證。</p>
+                    <div class="mt-12 bg-gray-50 p-6 rounded-lg">
+                        <p class="text-lg font-semibold">最終事件雜湊值 (Final Event Hash):</p>
+                        <p class="font-mono text-sm break-all text-blue-700 mt-2">${finalHash}</p>
+                    </div>
+                    <div class="mt-12 text-center">
+                        <p class="text-lg">掃描 QR Code 前往驗證頁面</p>
+                        <div class="mt-4 inline-block">${qrEl.outerHTML}</div>
+                    </div>
+                </div>
+                <div class="report-footer">
+                    <span>WesmartAI Inc.</span>
+                    <span>第 ${totalPages} / ${totalPages} 頁</span>
+                </div>
+            </div>`;
+            
+            reportContainer.innerHTML = html;
+        }
+
     </script>
 </body>
 </html>
