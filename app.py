@@ -14,12 +14,12 @@ def calc_sha256(file_path):
             h.update(chunk)
     return h.hexdigest()
 
-# ---- 頁面 ----
+# ---- 首頁 ----
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# ---- 預覽 ----
+# ---- 圖片預覽 ----
 @app.route("/preview", methods=["POST"])
 def preview():
     if "file" not in request.files:
@@ -43,7 +43,7 @@ def generate_pdf():
     pdf = FPDF(format="A4")
     pdf.add_page()
 
-    # 嘗試插入 LOGO
+    # ---- LOGO 或標題 ----
     if os.path.exists("LOGO.jpg"):
         try:
             pdf.image("LOGO.jpg", x=70, y=10, w=70)
@@ -51,18 +51,19 @@ def generate_pdf():
         except Exception as e:
             print("Logo insert error:", e)
             pdf.set_font("Helvetica", size=16)
-            pdf.cell(0, 10, "WesmartAI Digital Evidence Report", ln=True, align="C")
+            pdf.cell(0, 10, "WesmartAI Third-Party Digital Evidence Report", ln=True, align="C")
     else:
         pdf.set_font("Helvetica", size=16)
-        pdf.cell(0, 10, "WesmartAI Digital Evidence Report", ln=True, align="C")
+        pdf.cell(0, 10, "WesmartAI Third-Party Digital Evidence Report", ln=True, align="C")
 
+    # ---- Metadata ----
     pdf.ln(10)
     pdf.set_font("Helvetica", size=12)
     pdf.cell(0, 10, f"File: {file_name}", ln=True)
     pdf.cell(0, 10, f"SHA256: {sha256}", ln=True)
     pdf.cell(0, 10, f"Timestamp: {timestamp}", ln=True)
 
-    # 嵌入圖片預覽
+    # ---- 插入圖片 ----
     img_path = os.path.join(UPLOAD_FOLDER, file_name)
     if os.path.exists(img_path):
         try:
@@ -74,8 +75,9 @@ def generate_pdf():
     pdf.set_font("Helvetica", size=11)
     pdf.multi_cell(0, 8, (
         "Creative Process Statement:\n"
-        "This report records the digital evidence chain starting from user input. "
-        "Each artifact includes hash and timestamp to ensure integrity and verifiability."
+        "This report documents the digital evidence chain created by WesmartAI. "
+        "Each artifact includes a SHA256 hash and timestamp to ensure integrity, "
+        "traceability, and verifiable authorship."
     ))
 
     out_path = os.path.join(UPLOAD_FOLDER, f"report_{file_name}.pdf")
