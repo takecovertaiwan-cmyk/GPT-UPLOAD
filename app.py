@@ -7,7 +7,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 from fpdf import FPDF
 import qrcode
-from PIL import Image
+from PIL import Image, ImageEnhance
 import google.generativeai as genai
 
 # =============================================================
@@ -28,12 +28,24 @@ genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-2.5-flash"
 
 # =============================================================
-# 工具：浮水印（淡化）
+# 工具：建立淡化浮水印圖 (3%)
 # =============================================================
+def create_faint_logo(original_path, output_path):
+    try:
+        img = Image.open(original_path).convert("RGBA")
+        alpha = img.split()[3]
+        alpha = ImageEnhance.Brightness(alpha).enhance(0.03)  # 約3%
+        img.putalpha(alpha)
+        img.save(output_path)
+        return output_path
+    except Exception:
+        return original_path
+
 def add_watermark(pdf, logo_path):
-    if not os.path.exists(logo_path):
-        return
-    pdf.image(logo_path, x=40, y=90, w=130)
+    faint_logo = os.path.join(UPLOAD_FOLDER, "faint_logo.png")
+    logo_used = create_faint_logo(logo_path, faint_logo)
+    if os.path.exists(logo_used):
+        pdf.image(logo_used, x=40, y=90, w=130)
 
 # =============================================================
 @app.route("/uploads/<filename>")
@@ -66,8 +78,6 @@ def preview():
         })
     return jsonify(previews)
 
-# =============================================================
-# 生成 PDF + Gemini 驗證
 # =============================================================
 @app.route("/generate", methods=["POST"])
 def generate_pdf():
@@ -102,7 +112,7 @@ def generate_pdf():
     pdf.cell(0, 10, f"申請出證時間: {timestamp_utc}", ln=True, align="C")
     pdf.cell(0, 10, f"出證編號 (報告ID): {evidence_id}", ln=True, align="C")
     pdf.cell(0, 10, "出證單位: WesmartAI Inc.", ln=True, align="C")
-    pdf.set_y(-20)
+    pdf.set_y(-15)
     pdf.set_font("Taipei", "", 10)
     pdf.cell(0, 10, "1/3 頁", align="C")
 
@@ -164,7 +174,7 @@ def generate_pdf():
         if fdata.get("seed"):
             pdf.cell(0, 8, f"  隨機種子 (Seed): {fdata['seed']}", ln=True)
         pdf.ln(4)
-        pdf.image(file_path, x=40, w=100)  # 圖片縮小放同頁
+        pdf.image(file_path, x=40, w=100)
         pdf.ln(8)
         pdf.set_font("Taipei", "", 10)
         pdf.cell(0, 10, f"{idx+1}/3 頁", align="C")
@@ -174,9 +184,9 @@ def generate_pdf():
     # ---------------------------------------------------------
     pdf.add_page()
     add_watermark(pdf, "LOGO.jpg")
-    pdf.set_font("Taipei", "", 16)
-    pdf.cell(0, 10, "WesmartAI 生成式 AI 證據報告 WesmartAI Inc.", ln=True)
-    pdf.ln(10)
+    pdf.set_font("Taipei", "", 10)  # 與頁碼同大小
+    pdf.cell(0, 8, "WesmartAI 生成式 AI 證據報告 WesmartAI Inc.", ln=True)
+    pdf.ln(5)
     pdf.set_font("Taipei", "", 13)
     pdf.cell(0, 10, "三、報告驗證", ln=True)
     pdf.ln(5)
@@ -198,7 +208,6 @@ def generate_pdf():
     pdf.image(qr_path, x=80, w=50)
     os.remove(qr_path)
     pdf.ln(5)
-    pdf.set_font("Taipei", "", 10)
     pdf.cell(0, 10, "掃描 QR Code 前往驗證頁面", ln=True)
     pdf.cell(0, 10, "3/3 頁", align="C")
 
