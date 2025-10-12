@@ -2,82 +2,121 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WesmartAI 數位證據上傳與存證系統</title>
+  <title>WesmartAI 數位證據第三方存證系統</title>
   <style>
     body {
-      font-family: "Taipei Sans TC", Arial, sans-serif;
-      background-color: #f8fafc;
+      font-family: "Noto Sans TC", sans-serif;
+      background-color: #f5f7fb;
+      color: #222;
       margin: 0;
-      padding: 30px;
-      text-align: center;
+      padding: 0;
+    }
+    .container {
+      width: 80%;
+      max-width: 900px;
+      margin: 40px auto;
+      background: white;
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     h1 {
+      text-align: center;
       color: #0033a0;
+      font-size: 24px;
+      margin-bottom: 24px;
     }
     input[type="text"], input[type="file"] {
-      margin: 6px;
-      padding: 6px;
-      width: 250px;
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0 16px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      font-size: 14px;
     }
     button {
-      background-color: #0033a0;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      margin: 6px;
-    }
-    button:hover {
       background-color: #0055cc;
+      color: white;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
     }
-    .preview {
+    button:hover { background-color: #003f99; }
+
+    .preview-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
       margin-top: 20px;
+      justify-content: center;
     }
-    img {
-      max-width: 400px;
-      border-radius: 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    .preview-item {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 8px;
+      width: 180px;
+      text-align: center;
+      background-color: #fafafa;
+    }
+    .preview-item img {
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+    }
+    .hash {
+      font-size: 11px;
+      word-break: break-all;
+      color: #555;
+      margin-top: 6px;
+    }
+    .footer {
+      text-align: center;
+      font-size: 13px;
+      color: #666;
+      margin-top: 24px;
     }
   </style>
 </head>
 <body>
-  <h1>WesmartAI 數位證據上傳與存證系統</h1>
+  <div class="container">
+    <h1>WesmartAI 數位證據第三方存證系統</h1>
 
-  <p>請依序完成以下步驟：</p>
-  <p>1. 輸入出證申請人名稱<br>2. 上傳圖片（可複數）<br>3. 預覽與生成 PDF 存證報告</p>
+    <label>出證申請人名稱：</label>
+    <input type="text" id="applicant" placeholder="請輸入申請人名稱">
 
-  <div>
-    <label>出證申請人：</label>
-    <input type="text" id="applicant" placeholder="請輸入姓名" />
+    <label>上傳圖片（可複數）：</label>
+    <input type="file" id="fileInput" multiple accept="image/*">
+
+    <button onclick="uploadFiles()">生成預覽圖</button>
+
+    <div id="previewArea" class="preview-container"></div>
+
+    <div style="text-align:center; margin-top:24px;">
+      <button id="generateBtn" style="display:none;" onclick="generateReport()">生成 PDF 存證報告</button>
+    </div>
+
+    <div class="footer">
+      © 2025 WesmartAI | 數位證據存證平台
+    </div>
   </div>
-
-  <div>
-    <label>上傳圖片：</label>
-    <input type="file" id="file" accept="image/*" />
-  </div>
-
-  <button onclick="generatePreview()">生成預覽圖</button>
-
-  <div class="preview" id="preview-area"></div>
-
-  <button id="generate-btn" style="display:none;" onclick="generatePDF()">下載 PDF 存證報告</button>
 
   <script>
-    let currentFile = null;
-    let sha256Hash = "";
+    let uploadedFiles = [];
 
-    async function generatePreview() {
-      const fileInput = document.getElementById("file");
-      const applicant = document.getElementById("applicant").value;
-      if (!fileInput.files.length) {
-        alert("請先選擇圖片");
+    async function uploadFiles() {
+      const input = document.getElementById("fileInput");
+      if (!input.files.length) {
+        alert("請選擇至少一張圖片");
         return;
       }
-      currentFile = fileInput.files[0];
+
       const formData = new FormData();
-      formData.append("file", currentFile);
+      for (const file of input.files) {
+        formData.append("file", file);
+      }
 
       const res = await fetch("/preview", { method: "POST", body: formData });
       const data = await res.json();
@@ -87,47 +126,51 @@
         return;
       }
 
-      sha256Hash = data.sha256;
-
-      document.getElementById("preview-area").innerHTML = `
-        <h3>檔案名稱：${currentFile.name}</h3>
-        <p><b>SHA256：</b> ${data.sha256}</p>
-        <img src="${data.preview_url}" alt="預覽圖" />
-      `;
-      document.getElementById("generate-btn").style.display = "inline-block";
+      uploadedFiles = data;
+      renderPreview();
+      document.getElementById("generateBtn").style.display = "inline-block";
     }
 
-    async function generatePDF() {
-      const applicant = document.getElementById("applicant").value;
-      if (!applicant) {
-        alert("請輸入出證申請人名稱");
+    function renderPreview() {
+      const area = document.getElementById("previewArea");
+      area.innerHTML = "";
+      uploadedFiles.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "preview-item";
+        div.innerHTML = `
+          <img src="${item.preview_url}" alt="preview">
+          <div class="hash">檔案名稱：${item.file_name}</div>
+          <div class="hash">SHA256：${item.sha256.slice(0, 32)}...</div>
+        `;
+        area.appendChild(div);
+      });
+    }
+
+    async function generateReport() {
+      if (!uploadedFiles.length) {
+        alert("請先上傳圖片");
         return;
       }
-
-      const payload = {
-        file_name: currentFile.name,
-        sha256: sha256Hash,
-        applicant: applicant
-      };
+      const applicant = document.getElementById("applicant").value || "未填寫";
 
       const res = await fetch("/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ files: uploadedFiles, applicant })
       });
 
-      if (!res.ok) {
-        alert("報告生成失敗");
-        return;
+      if (res.status === 200) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "WesmartAI_存證報告.pdf";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else {
+        alert("生成報告失敗");
       }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `WesmartAI_Report_${currentFile.name}.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
     }
   </script>
 </body>
