@@ -28,13 +28,13 @@ genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-2.5-flash"
 
 # =============================================================
-# 工具：建立淡化浮水印圖 (3%)
+# 工具：建立淡化浮水印圖 (5%)
 # =============================================================
 def create_faint_logo(original_path, output_path):
     try:
         img = Image.open(original_path).convert("RGBA")
         alpha = img.split()[3]
-        alpha = ImageEnhance.Brightness(alpha).enhance(0.03)  # 約3%
+        alpha = ImageEnhance.Brightness(alpha).enhance(0.05)  # 約5%
         img.putalpha(alpha)
         img.save(output_path)
         return output_path
@@ -112,9 +112,6 @@ def generate_pdf():
     pdf.cell(0, 10, f"申請出證時間: {timestamp_utc}", ln=True, align="C")
     pdf.cell(0, 10, f"出證編號 (報告ID): {evidence_id}", ln=True, align="C")
     pdf.cell(0, 10, "出證單位: WesmartAI Inc.", ln=True, align="C")
-    pdf.set_y(-15)
-    pdf.set_font("Taipei", "", 10)
-    pdf.cell(0, 10, "1/3 頁", align="C")
 
     # ---------------------------------------------------------
     # 內頁（逐圖 Gemini 分析）
@@ -158,44 +155,33 @@ def generate_pdf():
 
         pdf.add_page()
         add_watermark(pdf, "LOGO.jpg")
-        pdf.set_font("Taipei", "", 16)
-        pdf.cell(0, 10, "WesmartAI 生成式 AI 證據報告 WesmartAI Inc.", ln=True)
-        pdf.ln(6)
         pdf.set_font("Taipei", "", 13)
         pdf.cell(0, 10, "一、生成任務基本資訊", ln=True)
         pdf.set_font("Taipei", "", 11)
-        pdf.cell(0, 8, f"  Trace Token: {trace_token}", ln=True)
-        pdf.cell(0, 8, f"  圖片索引: {idx}", ln=True)
-        pdf.cell(0, 8, f"  檔案名稱: {file_name}", ln=True)
-        pdf.cell(0, 8, f"  檔案大小: {ai_data.get('size_kb')} KB", ln=True)
-        pdf.cell(0, 8, f"  圖像雜湊 (SHA-256): {ai_data.get('sha256')}", ln=True)
+        pdf.cell(0, 8, f"Trace Token: {trace_token}", ln=True)
+        pdf.cell(0, 8, f"圖片索引: {idx}", ln=True)
+        pdf.cell(0, 8, f"檔案名稱: {file_name}", ln=True)
+        pdf.cell(0, 8, f"檔案大小: {ai_data.get('size_kb')} KB", ln=True)
+        pdf.cell(0, 8, f"圖像雜湊 (SHA-256): {ai_data.get('sha256')}", ln=True)
         if fdata.get("prompt"):
-            pdf.cell(0, 8, f"  輸入指令 (Prompt): {fdata['prompt']}", ln=True)
+            pdf.cell(0, 8, f"輸入指令 (Prompt): {fdata['prompt']}", ln=True)
         if fdata.get("seed"):
-            pdf.cell(0, 8, f"  隨機種子 (Seed): {fdata['seed']}", ln=True)
+            pdf.cell(0, 8, f"隨機種子 (Seed): {fdata['seed']}", ln=True)
         pdf.ln(4)
         pdf.image(file_path, x=40, w=100)
-        pdf.ln(8)
-        pdf.set_font("Taipei", "", 10)
-        pdf.cell(0, 10, f"{idx+1}/3 頁", align="C")
 
     # ---------------------------------------------------------
     # 結尾頁
     # ---------------------------------------------------------
     pdf.add_page()
     add_watermark(pdf, "LOGO.jpg")
-    pdf.set_font("Taipei", "", 10)  # 與頁碼同大小
-    pdf.cell(0, 8, "WesmartAI 生成式 AI 證據報告 WesmartAI Inc.", ln=True)
-    pdf.ln(5)
     pdf.set_font("Taipei", "", 13)
     pdf.cell(0, 10, "三、報告驗證", ln=True)
     pdf.ln(5)
     pdf.set_font("Taipei", "", 11)
     pdf.multi_cell(
         0, 8,
-        "本報告由WesmartAI數位證據三方存證系統自動生成，"
-        "AI驗證層由Gemini 2.5 Flash模型提供，用於抽取各圖檔之時間戳、雜湊與屬性。"
-        "所有數據具可驗證性與不可竄改性，可作為AI數位證據之存證歷程證明。"
+        "本報告由WesmartAI數位證據三方存證系統自動生成，AI驗證層由Gemini模型提供，用於抽取各圖檔之時間戳、雜湊與屬性。所有數據具可驗證性與不可竄改性，可作為AI數位證據之存證歷程證明。"
     )
     pdf.ln(5)
     final_event_hash = hashlib.sha256(all_hash_concat.encode()).hexdigest()
@@ -209,7 +195,6 @@ def generate_pdf():
     os.remove(qr_path)
     pdf.ln(5)
     pdf.cell(0, 10, "掃描 QR Code 前往驗證頁面", ln=True)
-    pdf.cell(0, 10, "3/3 頁", align="C")
 
     output_path = os.path.join(UPLOAD_FOLDER, f"report_{evidence_id}.pdf")
     pdf.output(output_path)
