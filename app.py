@@ -28,12 +28,12 @@ genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-2.5-flash"
 
 # =============================================================
-# 工具：浮水印
+# 工具：浮水印（淡化）
 # =============================================================
 def add_watermark(pdf, logo_path):
     if not os.path.exists(logo_path):
         return
-    pdf.image(logo_path, x=40, y=80, w=130)
+    pdf.image(logo_path, x=40, y=90, w=130)
 
 # =============================================================
 @app.route("/uploads/<filename>")
@@ -44,8 +44,6 @@ def uploaded_file(filename):
 def index():
     return render_template("index.html")
 
-# =============================================================
-# 多檔預覽
 # =============================================================
 @app.route("/preview", methods=["POST"])
 def preview():
@@ -92,18 +90,21 @@ def generate_pdf():
     # ---------------------------------------------------------
     pdf.add_page()
     add_watermark(pdf, "LOGO.jpg")
-    pdf.set_font("Taipei", "", 22)
-    pdf.cell(0, 10, "WesmartAI 證據報告", ln=True, align="C")
+    if os.path.exists("LOGO.jpg"):
+        pdf.image("LOGO.jpg", x=80, y=40, w=50)
+    pdf.set_font("Taipei", "", 30)
+    pdf.set_y(100)
+    pdf.cell(0, 15, "WesmartAI 證據報告", ln=True, align="C")
     pdf.ln(20)
     pdf.set_font("Taipei", "", 14)
-    pdf.cell(0, 10, f"出證申請人: {applicant}", ln=True)
-    pdf.cell(0, 10, "申請事項: WesmartAI 生成式 AI 證據報告", ln=True)
-    pdf.cell(0, 10, f"申請出證時間: {timestamp_utc}", ln=True)
-    pdf.cell(0, 10, f"出證編號 (報告ID): {evidence_id}", ln=True)
-    pdf.cell(0, 10, "出證單位: WesmartAI Inc.", ln=True)
-    pdf.ln(20)
+    pdf.cell(0, 10, f"出證申請人: {applicant}", ln=True, align="C")
+    pdf.cell(0, 10, "申請事項: WesmartAI 生成式 AI 證據報告", ln=True, align="C")
+    pdf.cell(0, 10, f"申請出證時間: {timestamp_utc}", ln=True, align="C")
+    pdf.cell(0, 10, f"出證編號 (報告ID): {evidence_id}", ln=True, align="C")
+    pdf.cell(0, 10, "出證單位: WesmartAI Inc.", ln=True, align="C")
+    pdf.set_y(-20)
     pdf.set_font("Taipei", "", 10)
-    pdf.cell(0, 10, "第 1/3 頁", align="R")
+    pdf.cell(0, 10, "1/3 頁", align="C")
 
     # ---------------------------------------------------------
     # 內頁（逐圖 Gemini 分析）
@@ -119,7 +120,6 @@ def generate_pdf():
         with open(file_path, "rb") as f:
             file_bytes = f.read()
 
-        # Gemini prompt
         prompt = """
         You are a digital forensics assistant.
         Analyze this image (binary bytes) and return a JSON object:
@@ -150,7 +150,7 @@ def generate_pdf():
         add_watermark(pdf, "LOGO.jpg")
         pdf.set_font("Taipei", "", 16)
         pdf.cell(0, 10, "WesmartAI 生成式 AI 證據報告 WesmartAI Inc.", ln=True)
-        pdf.ln(8)
+        pdf.ln(6)
         pdf.set_font("Taipei", "", 13)
         pdf.cell(0, 10, "一、生成任務基本資訊", ln=True)
         pdf.set_font("Taipei", "", 11)
@@ -163,11 +163,11 @@ def generate_pdf():
             pdf.cell(0, 8, f"  輸入指令 (Prompt): {fdata['prompt']}", ln=True)
         if fdata.get("seed"):
             pdf.cell(0, 8, f"  隨機種子 (Seed): {fdata['seed']}", ln=True)
-        pdf.ln(5)
-        pdf.image(file_path, x=25, w=160)
-        pdf.ln(5)
+        pdf.ln(4)
+        pdf.image(file_path, x=40, w=100)  # 圖片縮小放同頁
+        pdf.ln(8)
         pdf.set_font("Taipei", "", 10)
-        pdf.cell(0, 10, f"第 {idx+1}/3 頁", align="R")
+        pdf.cell(0, 10, f"{idx+1}/3 頁", align="C")
 
     # ---------------------------------------------------------
     # 結尾頁
@@ -183,18 +183,16 @@ def generate_pdf():
     pdf.set_font("Taipei", "", 11)
     pdf.multi_cell(
         0, 8,
-        "本報告由 WesmartAI 數位證據三方存證系統自動生成，"
+        "本報告由WesmartAI數位證據三方存證系統自動生成，"
         "AI驗證層由Gemini 2.5 Flash模型提供，用於抽取各圖檔之時間戳、雜湊與屬性。"
         "所有數據具可驗證性與不可竄改性，可作為AI數位證據之存證歷程證明。"
     )
     pdf.ln(5)
-
     final_event_hash = hashlib.sha256(all_hash_concat.encode()).hexdigest()
     pdf.cell(0, 10, "最終事件雜湊值 (Final Event Hash):", ln=True)
     pdf.set_font("Taipei", "", 10)
     pdf.multi_cell(0, 8, final_event_hash)
     pdf.ln(5)
-
     qr_path = os.path.join(UPLOAD_FOLDER, f"{evidence_id}_verify.png")
     qrcode.make(f"https://wesmartai.com/verify/{evidence_id}").save(qr_path)
     pdf.image(qr_path, x=80, w=50)
@@ -202,7 +200,7 @@ def generate_pdf():
     pdf.ln(5)
     pdf.set_font("Taipei", "", 10)
     pdf.cell(0, 10, "掃描 QR Code 前往驗證頁面", ln=True)
-    pdf.cell(0, 10, "第 3/3 頁", align="R")
+    pdf.cell(0, 10, "3/3 頁", align="C")
 
     output_path = os.path.join(UPLOAD_FOLDER, f"report_{evidence_id}.pdf")
     pdf.output(output_path)
