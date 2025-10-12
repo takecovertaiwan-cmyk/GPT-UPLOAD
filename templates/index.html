@@ -7,43 +7,69 @@
   <style>
     body {
       font-family: "Taipei Sans TC", Arial, sans-serif;
-      background-color: #f8fafc;
+      background-color: #ffffff;
       margin: 0;
-      padding: 30px;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 600px;
+      width: 100%;
       text-align: center;
     }
+
     h1 {
       color: #0033a0;
-      font-size: 28px;
+      font-size: 26px;
       line-height: 1.4;
+      margin-bottom: 30px;
     }
+
     h2 {
       color: #111827;
-      margin-top: 40px;
       font-size: 20px;
+      margin-top: 40px;
+      margin-bottom: 15px;
     }
+
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: 500;
+    }
+
     input[type="text"], input[type="file"] {
-      margin: 6px;
-      padding: 8px;
-      width: 260px;
+      width: 90%;
+      max-width: 500px;
+      padding: 10px;
       border: 1px solid #ccc;
-      border-radius: 5px;
+      border-radius: 6px;
+      font-size: 15px;
+      margin-top: 5px;
     }
+
     button {
+      width: 100%;
+      max-width: 500px;
       color: white;
       border: none;
       border-radius: 6px;
-      padding: 12px 24px;
+      padding: 14px 0;
       font-size: 16px;
       cursor: pointer;
-      margin-top: 12px;
+      margin-top: 15px;
+      transition: background-color 0.3s;
     }
+
     #preview-btn {
       background-color: #1e3a8a;
     }
     #preview-btn:hover {
       background-color: #1d4ed8;
     }
+
     #generate-btn {
       background-color: #b91c1c;
     }
@@ -51,6 +77,7 @@
       background-color: #9ca3af;
       cursor: not-allowed;
     }
+
     .preview {
       margin-top: 25px;
       display: flex;
@@ -58,38 +85,46 @@
       justify-content: center;
       gap: 20px;
     }
+
     .preview-item {
       border: 1px solid #ddd;
       padding: 10px;
       border-radius: 8px;
-      background: white;
-      width: 320px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      background: #f9fafb;
+      width: 90%;
+      max-width: 300px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
+
     img {
       max-width: 100%;
       border-radius: 8px;
     }
+
+    @media (max-width: 600px) {
+      h1 { font-size: 22px; }
+      button { font-size: 15px; }
+    }
   </style>
 </head>
 <body>
-  <h1>WesmartAI<br>數位證據上傳與存證系統</h1>
+  <div class="container">
+    <h1>WesmartAI<br>數位證據上傳與存證系統</h1>
 
-  <h2>1. 生成預覽圖像</h2>
-  <div>
-    <label>出證申請人：</label><br>
+    <h2>1. 生成預覽圖像</h2>
+    <label>出證申請人：</label>
     <input type="text" id="applicant" placeholder="請輸入姓名或公司名稱" />
-  </div>
-  <div>
-    <label>上傳圖片：</label><br>
+
+    <label>上傳圖片：</label>
     <input type="file" id="files" multiple accept="image/*" />
+
+    <button id="preview-btn" onclick="generatePreview()">生成圖像</button>
+
+    <div class="preview" id="preview-area"></div>
+
+    <h2>2. 生成 PDF 報告</h2>
+    <button id="generate-btn" onclick="generatePDF()">生成 PDF 報告</button>
   </div>
-  <button id="preview-btn" onclick="generatePreview()">生成圖像</button>
-
-  <div class="preview" id="preview-area"></div>
-
-  <h2>2. 生成 PDF 報告</h2>
-  <button id="generate-btn" onclick="generatePDF()" style="display:none;">生成 PDF 報告</button>
 
   <script>
     let fileList = [];
@@ -123,7 +158,6 @@
           </div>
         `;
       });
-      document.getElementById("generate-btn").style.display = "inline-block";
     }
 
     async function generatePDF() {
